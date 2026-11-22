@@ -42,7 +42,10 @@ const RaceSim = (() => {
       this.paceF = 0.55; this.t = 0; this.flag = 'green'; this.phase = 'racing';
       this.stage = 1; this.stageResults = []; this.cautions = 0; this.log = [];
       this.pace = { active: false, d: 0 }; this.cautionTime = 0; this.cautionDecided = false;
-      this.playerId = opts.playerId; this.autoPlayer = !!opts.autoPlayer; this.style = opts.style || 'balanced';
+      // v1.1: a team can run two cars. playerIds lists every team car; the first is "car 1".
+      this.playerIds = opts.playerIds || [opts.playerId]; this.playerId = this.playerIds[0];
+      this.autoPlayer = !!opts.autoPlayer; this.style = opts.style || 'balanced';
+      this.callQueue = []; this.restartT = 0;
       this.onEvent = opts.onEvent || (() => {});
       this.finishOrder = []; this.paused = false; this.finishT = 0; this.restartPending = false;
       this.particles = [];
@@ -52,11 +55,11 @@ const RaceSim = (() => {
         const perf = 0.55 * e.car + 0.45 * e.drv;
         const lane = this.geom.lanes.length === 3 ? laneIdx : laneIdx;
         return {
-          e, id: e.id, isPlayer: e.id === this.playerId, grid: i + 1,
+          e, id: e.id, isPlayer: this.playerIds.includes(e.id), slot: e.slot || 1, grid: i + 1,
           d: -0.01 - row * sp, v: this.baseV * this.paceF, lane, lat: this.geom.lanes[lane], latT: this.geom.lanes[lane],
-          tire: 1, fuel: 1, damage: 0, status: 'run', mode: e.isPlayer ? (opts.mode || 'normal') : 'normal',
+          tire: 1, fuel: 1, damage: 0, status: 'run', mode: e.isPlayer ? ((opts.modes && opts.modes[e.id]) || opts.mode || 'normal') : 'normal',
           pit: null, laps: 0, lapsLed: 0, stagePts: 0, perf,
-          form: U.gauss() * 0.004 * (1.4 - e.cons / 100), noise: 0, spin: 0, outT: 0, reason: '', yaw: 0,
+          form: U.gauss() * 0.004 * (1.4 - e.cons / 100) + ((e.morale === undefined ? 70 : e.morale) - 60) * 0.00008, noise: 0, spin: 0, outT: 0, reason: '', yaw: 0,
           stall: 0, crew: e.crew, pitCount: 0, pref: (this.type === 'superspeedway' ? U.randi(0, 1) : 0),
           finishPos: 0, decided: false, lastFrac: 0, slowT: 0,
         };
@@ -68,7 +71,9 @@ const RaceSim = (() => {
     }
     frac(d) { return d - Math.floor(d); }
     msg(text, kind) { this.log.push({ t: this.t, text, kind: kind || 'info' }); if (this.log.length > 40) this.log.shift(); this.onEvent('msg', { text, kind }); }
-    player() { return this.cars.find(c => c.isPlayer); }
+    player(id) { id = id || this.playerId; return this.cars.find(c => c.id === id); }
+    teamCars() { return this.playerIds.map(id => this.cars.find(c => c.id === id)).filter(Boolean); }
+    tag(c) { return this.playerIds.length > 1 ? '#' + c.e.number + ': ' : ''; }
     leaderLaps() { const o = this.order(); return o.length ? Math.max(0, o[0].laps) : 0; }
     order() {
       const key = c => c.status === 'fin' ? c.laps : c.d;
@@ -81,13 +86,26 @@ const RaceSim = (() => {
     }
     positionOf(car) { return this.order().indexOf(car) + 1; }
     trackCars() { return this.cars.filter(c => c.status === 'run' && !(c.pit && c.pit.phase !== 'wait')); }
-    setMode(m) { const p = this.player(); if (p) p.mode = m; }
-    requestPit(type) { const p = this.player(); if (p && p.status === 'run' && !p.pit) { p.pit = { type, phase: 'wait' }; this.msg('PIT CALL: ' + ({ four: '4 TIRES + FUEL', two: '2 TIRES + FUEL', fuel: 'FUEL ONLY' })[type], 'player'); } }
-    playerCautionChoice(choice) {
-      const p = this.player(); this.paused = false;
-      if (!p || p.status !== 'run') return;
-      if (choice !== 'stay') { p.pit = { type: choice, phase: 'wait' }; this.msg('YOU CALLED ' + ({ four: '4 TIRES', two: '2 TIRES', fuel: 'FUEL ONLY' })[choice] + ' - PIT ROAD!', 'player'); }
-      else this.msg('YOU STAY OUT - TRACK POSITION!', 'player');
+    setMode(m, id) { const p = this.player(id); if (p) p.mode = m; }
+    requestPit(type, id) { const p = this.player(id); if (p && p.status === 'run' && !p.pit) { p.pit = { type, phase: 'wait' }; this.msg(this.tag(p) + 'PIT CALL: ' + ({ four: '4 TIRES + FUEL', two: '2 TIRES + FUEL', fuel: 'FUEL ONLY' })[type], 'player'); } }
+    cautionInfo(p) { return { carId: p.id, number: p.e.number, slot: p.slot, multi: this.playerIds.length > 1, pos: this.positionOf(p), tire: p.tire, fuelLaps: p.fuel * this.T.fuelLaps, lapsLeft: this.laps - this.leaderLaps(), damage: p.damage, suggestion: cautionChoice(this, p, 'balanced') }; }
+    // the race stays paused until every team car has its caution call
+    nextCall() {
+      while (this.callQueue.length) {
+        const p = this.player(this.callQueue[0]);
+        if (p && p.status === 'run' && !p.pit) { this.paused = true; this.onEvent('cautionCall', this.cautionInfo(p)); return true; }
+        this.callQueue.shift();
+      }
+      this.paused = false; return false;
+    }
+    playerCautionChoice(choice, id) {
+      const p = this.player(id || this.callQueue[0]);
+      this.callQueue = this.callQueue.filter(x => !p || x !== p.id);
+      if (p && p.status === 'run') {
+        if (choice !== 'stay') { p.pit = { type: choice, phase: 'wait' }; this.msg(this.tag(p) + 'YOU CALLED ' + ({ four: '4 TIRES', two: '2 TIRES', fuel: 'FUEL ONLY' })[choice] + ' - PIT ROAD!', 'player'); }
+        else this.msg(this.tag(p) + 'YOU STAY OUT - TRACK POSITION!', 'player');
+      }
+      if (!this.nextCall()) this.paused = false;
     }
 
     startCaution(reason, lapsDur) {
@@ -107,15 +125,10 @@ const RaceSim = (() => {
         if (c.isPlayer && !this.autoPlayer) continue;
         const ch = cautionChoice(this, c, c.isPlayer ? this.style : U.pick(['aggressive', 'balanced', 'balanced', 'conservative']));
         if (ch !== 'stay') c.pit = { type: ch, phase: 'wait' };
-        else if (c.isPlayer) this.msg('CREW CHIEF: WE STAY OUT', 'player');
-        else if (c.isPlayer) {}
-        if (c.isPlayer && ch !== 'stay') this.msg('CREW CHIEF CALLS ' + ({ four: '4 TIRES', two: '2 TIRES', fuel: 'FUEL ONLY' })[ch], 'player');
+        else if (c.isPlayer) this.msg(this.tag(c) + 'CREW CHIEF: WE STAY OUT', 'player');
+        if (c.isPlayer && ch !== 'stay') this.msg(this.tag(c) + 'CREW CHIEF CALLS ' + ({ four: '4 TIRES', two: '2 TIRES', fuel: 'FUEL ONLY' })[ch], 'player');
       }
-      const p = this.player();
-      if (p && p.status === 'run' && !this.autoPlayer && !p.pit) {
-        this.paused = true;
-        this.onEvent('cautionCall', { pos: this.positionOf(p), tire: p.tire, fuelLaps: p.fuel * this.T.fuelLaps, lapsLeft: this.laps - this.leaderLaps(), damage: p.damage, suggestion: cautionChoice(this, p, 'balanced') });
-      }
+      if (!this.autoPlayer) { this.callQueue = this.teamCars().filter(p => p.status === 'run' && !p.pit).map(p => p.id); this.nextCall(); }
     }
 
     crash(car) {
@@ -141,7 +154,7 @@ const RaceSim = (() => {
       }
       const desc = r < 0.42 ? names[0] + ' SPINS' : involved.length > 4 ? 'THE BIG ONE! ' + involved.length + ' CARS' : names.join(', ') + ' WRECK';
       const pl = involved.find(c => c.isPlayer);
-      if (pl) this.msg(pl.status === 'dnf' ? 'YOUR CAR IS DESTROYED - OUT OF THE RACE' : 'YOU ARE INVOLVED! DAMAGE ' + Math.round(pl.damage * 100) + '%', 'bad');
+      for (const pc of involved.filter(c => c.isPlayer)) this.msg(this.tag(pc) + (pc.status === 'dnf' ? 'YOUR CAR IS DESTROYED - OUT OF THE RACE' : 'YOU ARE INVOLVED! DAMAGE ' + Math.round(pc.damage * 100) + '%'), 'bad');
       if (r < 0.42 && U.chance(0.35) && !pl) { this.msg(desc + ' - KEEPS GOING, NO CAUTION', 'info'); return; }
       this.startCaution(desc, involved.length > 3 ? 5 : U.randi(3, 4));
     }
@@ -159,7 +172,7 @@ const RaceSim = (() => {
 
     step(dt) {
       if (this.paused || this.phase === 'done') return;
-      this.t += dt;
+      this.t += dt; if (this.restartT > 0) this.restartT -= dt;
       const g = this.geom, L = g.L, T = this.T, bv = this.baseV;
       const yellow = this.flag === 'yellow';
       // physical order on track by frac
@@ -202,8 +215,9 @@ const RaceSim = (() => {
             if (prog >= c.stall * g.pitRange) {
               c.pit.phase = 'stop'; c.v = 0; desired = 0;
               const base = PIT_TIME[c.pit.type] * this.lapTime;
-              let time = base * (1.3 - c.crew * 0.5) + (c.damage > 0.05 ? (0.2 + c.damage) * this.lapTime : 0);
-              if (U.chance(0.07 - c.crew * 0.05)) { time += 0.35 * this.lapTime; if (c.isPlayer) this.msg('PIT ROAD MISTAKE! SLOW STOP', 'bad'); }
+              const ps = c.e.pit === undefined ? 50 : c.e.pit; // driver hitting the marks on pit road
+              let time = base * (1.3 - c.crew * 0.5) * (1.07 - ps / 100 * 0.14) + (c.damage > 0.05 ? (0.2 + c.damage) * this.lapTime : 0);
+              if (U.chance(Math.max(0.004, 0.07 - c.crew * 0.05 + (50 - ps) * 0.0006))) { time += 0.35 * this.lapTime; if (c.isPlayer) this.msg(this.tag(c) + 'PIT ROAD MISTAKE! SLOW STOP', 'bad'); }
               c.pit.timer = time; c.pitCount++;
             }
           } else if (c.pit.phase === 'stop') {
@@ -213,7 +227,7 @@ const RaceSim = (() => {
               if (ty === 'four') c.tire = 1; else if (ty === 'two') c.tire = Math.min(1, (c.tire + 1) / 2 + 0.05);
               c.fuel = 1; if (c.damage > 0.05) c.damage *= 0.35;
               c.pit.phase = 'exit';
-              if (c.isPlayer) this.msg('PIT STOP DONE: ' + ({ four: '4 TIRES', two: '2 TIRES', fuel: 'FUEL' })[ty] + ' IN ' + (c.pit_t = 0, '') + 'GO GO GO!', 'player');
+              if (c.isPlayer) this.msg(this.tag(c) + 'PIT STOP DONE: ' + ({ four: '4 TIRES', two: '2 TIRES', fuel: 'FUEL' })[ty] + ' - GO GO GO!', 'player');
             }
           } else if (c.pit.phase === 'exit') {
             desired = pv;
@@ -234,7 +248,8 @@ const RaceSim = (() => {
           let f = 1 + (c.perf - 70) * 0.003 + c.form + md.spd + c.noise - (1 - c.tire) * T.tireFall - c.damage * 0.08;
           const laneIdx = g.lanes.indexOf(c.latT); if (laneIdx > 0 && T.outsidePen) f -= T.outsidePen * laneIdx;
           const dr = ahead(c, T.draftRange, 18);
-          if (dr) f += T.draft * Math.pow(1 - dr.gp / T.draftRange, 0.7);
+          if (dr) f += T.draft * Math.pow(1 - dr.gp / T.draftRange, 0.7) * (0.8 + c.e.craft / 250);
+          if (this.restartT > 0) f += ((c.e.pit === undefined ? 50 : c.e.pit) - 50) * 0.0004; // restart jump
           if (this.type === 'superspeedway') {
             // bump-draft push from car behind
             const i = idx.get(c); const b = byFrac[(i - 1 + n) % n];
@@ -247,7 +262,7 @@ const RaceSim = (() => {
           if (bl && desired > bl.o.v * 0.999 && !(bl.o.pit && bl.o.pit.phase !== 'wait')) {
             const lapped = bl.o.d < c.d - 0.5;
             const adv = U.clamp((desired / Math.max(bl.o.v, 1e-6) - 1) * 60, 0, 3);
-            const rate = T.laneRate * (0.5 + c.e.craft / 100) * (lapped ? 4 : 1) * (1 + adv);
+            const rate = T.laneRate * (0.5 + c.e.craft / 100) * (0.7 + (c.e.aggr === undefined ? 50 : c.e.aggr) / 170) * (lapped ? 4 : 1) * (1 + adv);
             let moved = false;
             if (U.chance(rate * dt)) {
               const li = g.lanes.indexOf(c.latT); const opts = [li + 1, li - 1].filter(k => k >= 0 && k < g.lanes.length);
@@ -281,23 +296,24 @@ const RaceSim = (() => {
         // pit entry
         if (c.pit && c.pit.phase === 'wait' && c.status === 'run') {
           const p0 = g.pitProg(prevFrac), p1 = g.pitProg(fr);
-          if (p1 < p0 && p1 < 0.05) { c.pit.phase = 'lane'; c.latT = g.pitLat; if (c.isPlayer) this.msg('YOU ARE ON PIT ROAD', 'player'); }
+          if (p1 < p0 && p1 < 0.05) { c.pit.phase = 'lane'; c.latT = g.pitLat; if (c.isPlayer) this.msg(this.tag(c) + 'ON PIT ROAD', 'player'); }
         }
         // consumption
         const cMul = this.flag === 'yellow' ? 0.15 : 1;
         if (dd > 0) {
           const md = MODES[c.mode] || MODES.normal;
           c.tire = Math.max(0.05, c.tire - T.wear * md.wear * (1.2 - c.e.tires / 250) * dd * cMul);
-          c.fuel = Math.max(0, c.fuel - dd / T.fuelLaps * md.fuel * (this.flag === 'yellow' ? 0.4 : 1));
+          const fs = c.e.fuelS === undefined ? 50 : c.e.fuelS; // fuel-saving skill
+          c.fuel = Math.max(0, c.fuel - dd / T.fuelLaps * md.fuel * (1.06 - fs / 100 * 0.12) * (this.flag === 'yellow' ? 0.4 : 1));
         }
         // incidents (green only)
         if (c.status === 'run' && this.flag === 'green' && this.phase === 'racing' && !c.pit && dd > 0 && this.t > 3) {
           const md = MODES[c.mode] || MODES.normal;
-          const risk = T.incident * (1.7 - c.e.cons / 100) * md.risk * (1 + (1 - c.tire) * 1.4) * (1 + c.damage);
+          const risk = T.incident * (1.7 - c.e.cons / 100) * (0.75 + (c.e.aggr === undefined ? 50 : c.e.aggr) / 200) * md.risk * (1 + (1 - c.tire) * 1.4) * (1 + c.damage);
           if (U.chance(risk * dd)) this.crash(c);
           else if (U.chance(0.00025 * (1.5 - c.e.rel / 100) * dd)) {
             c.status = 'dnf'; c.reason = 'ENGINE'; c.outT = 3;
-            if (c.isPlayer) this.msg('ENGINE FAILURE! YOU ARE OUT', 'bad');
+            if (c.isPlayer) this.msg(this.tag(c) + 'ENGINE FAILURE! YOU ARE OUT', 'bad');
             if (U.chance(0.45)) this.startCaution('#' + c.e.number + ' BLOWS AN ENGINE', 3);
             else this.msg('#' + c.e.number + ' ENGINE LETS GO', 'info');
           }
@@ -355,9 +371,8 @@ const RaceSim = (() => {
           if (this.cautionTime <= 0 && lapsLeft > 0) {
             const pitting = this.cars.some(c => c.pit && c.pit.phase !== 'wait' && c.status === 'run');
             if (!pitting || this.cautionTime < -this.lapTime * 2) {
-              this.flag = 'green'; this.pace.active = false;
-              this.cars.forEach(c => { if (c.pit && c.pit.phase === 'wait' && !c.isPlayer) c.pit = null; });
-              const p = this.player(); if (p && p.pit && p.pit.phase === 'wait') { p.pit = null; }
+              this.flag = 'green'; this.pace.active = false; this.restartT = this.lapTime * 0.6;
+              this.cars.forEach(c => { if (c.pit && c.pit.phase === 'wait') c.pit = null; });
               this.msg('GREEN FLAG - RESTART!', 'green'); this.onEvent('green', {});
             }
           }
@@ -369,7 +384,7 @@ const RaceSim = (() => {
             const lapsLeft = this.laps - c.laps; const fl = c.fuel * T.fuelLaps;
             const needFuel = fl < lapsLeft + 0.3;
             if (c.isPlayer && !this.autoPlayer) {
-              if (needFuel && fl < 1.3) { c.pit = { type: c.tire < 0.7 ? 'four' : 'fuel', phase: 'wait' }; this.msg('CREW CHIEF: LOW FUEL, BOXING THIS LAP!', 'player'); }
+              if (needFuel && fl < 1.3) { c.pit = { type: c.tire < 0.7 ? 'four' : 'fuel', phase: 'wait' }; this.msg(this.tag(c) + 'CREW CHIEF: LOW FUEL, BOXING THIS LAP!', 'player'); }
               continue;
             }
             if (needFuel && fl < 1.4 + Math.random() * 0.4) c.pit = { type: c.tire < 0.8 ? 'four' : 'fuel', phase: 'wait' };
@@ -390,7 +405,7 @@ const RaceSim = (() => {
     }
 
     runToEnd() {
-      this.autoPlayer = true; this.paused = false;
+      this.autoPlayer = true; this.paused = false; this.callQueue = [];
       let guard = 0; const dt = 1 / 15;
       while (this.phase !== 'done' && guard++ < 400000) this.step(dt);
     }

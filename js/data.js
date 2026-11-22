@@ -78,7 +78,7 @@ const DATA = (() => {
   const FACILITIES = {
     shop: { name: 'SHOP', desc: 'Faster R&D, bigger part gains, more engineering points.' },
     engineDept: { name: 'ENGINE DEPT', desc: 'Extra horsepower and engine reliability.' },
-    simulator: { name: 'SIMULATOR', desc: 'Sharpens your driver on race day and grows young talent.' },
+    simulator: { name: 'SIMULATOR', desc: 'Sharpens drivers on race day, grows young talent and sharpens scout reports.' },
     pitCenter: { name: 'PIT CREW CENTER', desc: 'Faster pit stops and fewer pit road mistakes.' },
   };
   const FAC_COST = [0, 0, 70000, 140000, 260000, 450000]; // cost to reach level index
@@ -93,5 +93,77 @@ const DATA = (() => {
     ['DOUBLE D TOWING', '#f28c18', '#1a1a1a'], ['VFW POST 112', '#1a2f6b', '#f2f2f2']];
   const POINTS = [40, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
   const XP_PER_LEVEL = 120;
-  return { USED_CARS, LOCAL_SPONSORS, SERIES, TYPES, TRACKS, CALENDARS, FIRST, LAST, TEAM_A, TEAM_B, SPONSORS, BODY_COLORS, PARTS, PART_W, FACILITIES, FAC_COST, POINTS, XP_PER_LEVEL };
+  // ---------- v1.1 ----------
+  const VERSION = '1.1';
+  // Driver stats shown on cards (aggression is a style: more passes, more wrecks)
+  const DRIVER_STATS = [
+    ['speed', 'SPEED', 'RAW PACE. THE BIGGEST PART OF LAP TIME.'],
+    ['cons', 'CONSISTENCY', 'FEWER MISTAKES AND SPINS, STEADIER LAPS.'],
+    ['craft', 'RACECRAFT', 'PASSING AND DRAFTING. HUGE ON SUPERSPEEDWAYS.'],
+    ['tires', 'TIRE MGMT', 'SLOWER TIRE WEAR ON LONG RUNS.'],
+    ['fuel', 'FUEL SAVING', 'STRETCHES A TANK FURTHER.'],
+    ['pit', 'PIT RD/RESTART', 'HITS PIT BOX MARKS, JUMPS RESTARTS.'],
+    ['aggr', 'AGGRESSION', 'MORE PASS TRIES - BUT MORE WRECKS.'],
+  ];
+  const DEV_MAX = 2; // development (reserve) driver spots
+  // Second car: price & per-race costs are scaled by series in career.js
+  const CAR2 = { price: 45000, rep: 20, runBase: 5000 };
+  // Scouts: cost is ARCA price, scaled up in higher series. acc = how much a report reveals (0..1)
+  const SCOUTS = [
+    { id: 'local', name: 'LOCAL SCOUT', cost: 1000, acc: 0.25, n: 2, potBoost: 0, desc: 'A BUDDY WITH A STOPWATCH. CHEAP, FUZZY REPORTS.' },
+    { id: 'regional', name: 'REGIONAL SCOUT', cost: 4000, acc: 0.42, n: 3, potBoost: 6, desc: 'COVERS A FEW STATES. CLEARER REPORTS, BETTER KIDS.' },
+    { id: 'national', name: 'NATIONAL SCOUT', cost: 12000, acc: 0.58, n: 3, potBoost: 12, desc: 'THE PRO. SHARP REPORTS AND THE BEST HIDDEN TALENT.' },
+  ];
+  const FEEDERS = [
+    { id: 'karting', name: 'KARTING', age: [14, 17], cur: -6, pot: 14, bias: { speed: 4, craft: 2, fuel: -5, pit: -3 }, desc: 'YOUNG & RAW. HIGHEST CEILING.' },
+    { id: 'latemodel', name: 'LATE MODELS', age: [18, 27], cur: 5, pot: 3, bias: { cons: 4, tires: 4, fuel: 3 }, desc: 'READY NOW. LESS UPSIDE.' },
+    { id: 'dirt', name: 'DIRT OVALS', age: [16, 25], cur: 0, pot: 8, bias: { craft: 6, aggr: 18, cons: -4 }, desc: 'FEARLESS PASSERS. WILD.' },
+    { id: 'legends', name: 'LEGENDS CARS', age: [15, 21], cur: -3, pot: 10, bias: { pit: 5, speed: 2, craft: 2 }, desc: 'SHARP KIDS. GOOD RESTARTS.' },
+  ];
+  // Trophy cabinet catalog. kind = sprite, metal = color. Per-track and per-series trophies are built from TRACKS/SERIES.
+  const MILESTONES = [
+    ['firstStart', 'FIRST START', 'star', 'bronze', 'RUN YOUR FIRST RACE.'],
+    ['firstTop10', 'FIRST TOP-10', 'star', 'bronze', 'FINISH A RACE IN THE TOP 10.'],
+    ['firstStage', 'STAGE WINNER', 'star', 'silver', 'WIN A STAGE.'],
+    ['firstPole', 'POLE SITTER', 'star', 'silver', 'QUALIFY ON POLE.'],
+    ['firstPodium', 'FIRST PODIUM', 'medal', 'silver', 'FINISH TOP 3.'],
+    ['firstWin', 'FIRST WIN', 'cup', 'gold', 'WIN A RACE.'],
+    ['firstSponsor', 'FIRST SPONSOR', 'star', 'bronze', 'SIGN YOUR FIRST SPONSOR.'],
+    ['firstProspect', 'TALENT SPOTTER', 'star', 'silver', 'SIGN A SCOUTED PROSPECT.'],
+    ['twoCars', 'TWO-CAR TEAM', 'star', 'gold', 'RUN A SECOND CAR.'],
+    ['oneTwo', 'ONE-TWO FINISH', 'cup', 'silver', 'YOUR TWO CARS FINISH 1ST AND 2ND.'],
+    ['wins10', '10 WINS', 'big', 'silver', 'WIN 10 RACES AS A TEAM.'],
+    ['wins25', '25 WINS', 'big', 'gold', 'WIN 25 RACES AS A TEAM.'],
+    ['million', 'MILLIONAIRE', 'star', 'gold', 'HAVE $1,000,000 IN THE BANK.'],
+  ];
+  const CUP_TROPHIES = [
+    ['playoff', 'PLAYOFF BERTH', 'medal', 'silver', 'MAKE THE CUP PLAYOFFS (TOP 8 AFTER RACE 7).'],
+    ['champ4', 'CHAMPIONSHIP 4', 'medal', 'gold', 'REACH THE CUP CHAMPIONSHIP 4 FINALE.'],
+    ['cupChamp', 'CUP CHAMPION', 'big', 'gold', 'WIN THE CUP SERIES CHAMPIONSHIP.'],
+  ];
+  const CHANGELOG = [
+    { v: '1.1', date: 'NOV 22, 2026', title: 'TWO CARS & TALENT', items: [
+      'SECOND CAR: BUY A 2ND CHASSIS IN THE GARAGE ONCE YOUR TEAM HAS THE REP AND CASH. IT HAS ITS OWN DRIVER, PRIMARY SPONSOR, PRIZE MONEY AND PER-RACE COSTS.',
+      'BOTH TEAM CARS RACE, GLOW ON TRACK AND IN THE TOWER, AND GET THEIR OWN PIT CALLS (TAP THE CAR TABS ON RACE DAY).',
+      'OWNER POINTS: STANDINGS NOW HAVE AN OWNERS TAB THAT ADDS UP BOTH CARS.',
+      'HIRED MANAGER: BIGGER TEAMS IN TRUCKS AND UP CAN RUN TWO CARS.',
+      'DRIVER STATS: SPEED, CONSISTENCY, RACECRAFT, TIRE MGMT, FUEL SAVING, PIT ROAD/RESTARTS AND AGGRESSION - ALL USED BY THE RACE SIM.',
+      'DRIVERS NOW SHOW AGE, POTENTIAL STARS, MORALE, SALARY AND CONTRACT. YOUNG DRIVERS GROW, OLD ONES SLOW DOWN.',
+      'SCOUTING: SEND A LOCAL, REGIONAL OR NATIONAL SCOUT TO KARTING, LATE MODELS, DIRT OR LEGENDS. REPORTS SHOW RANGES THAT NARROW THE MORE YOU SCOUT. SIMULATOR LEVEL SHARPENS REPORTS.',
+      'DEVELOPMENT DRIVERS: SIGN UP TO 2 PROSPECTS TO GROW ON THE SIDE, THEN PUT THEM IN A CAR.',
+      'PODIUM CELEBRATION AFTER EVERY RACE: TOP 3 ON THE PODIUM WITH CONFETTI, CHAMPAGNE AND A TROPHY - EXTRA FIREWORKS WHEN YOUR CAR IS UP THERE. A BIGGER ONE CROWNS THE SEASON CHAMPION.',
+      'TROPHY CABINET: A NEW HUB TILE WITH A SHELF FOR EVERY WIN (PER TRACK), PODIUM, TITLE, CUP PLAYOFF RUN, PROMOTION AND MILESTONE. LOCKED ONES SHOW AS SILHOUETTES - TAP ANY TROPHY FOR DETAILS.',
+      'THIS UPDATE LOG. OLD SAVES CARRY OVER - YOUR DRIVERS GOT THEIR NEW STATS AUTOMATICALLY.',
+    ] },
+    { v: '1.0', date: 'NOV 22, 2026', title: 'INITIAL RELEASE', items: [
+      'DRAFTMASTER-STYLE PIXEL HUB WITH TEAM, GARAGE, DRIVERS, FACILITIES, SPONSORS, CALENDAR AND STANDINGS.',
+      'TWO CAREERS: TEAM OWNER (GRASSROOTS $15K START, USED CAR LOT, ROOKIES, SPONSORS EARNED BY RESULTS) OR HIRED MANAGER.',
+      'THE LADDER: ARCA > TRUCKS > O\'REILLY > CUP, WITH CUP PLAYOFFS AND A CHAMPIONSHIP 4 FINALE.',
+      'RACE SIM WITH DRAFTING, PASSING, TIRE WEAR, FUEL, CAUTIONS, STAGES AND PIT STOPS ON 12 TRACKS.',
+      'PIT-WALL CALLS: PUSH / NORMAL / SAVE, AND 4 TIRES / 2 TIRES / FUEL / STAY OUT UNDER CAUTION.',
+      'AUTOSAVE PLUS EXPORT / IMPORT SAVE CODES.',
+    ] },
+  ];
+  return { USED_CARS, LOCAL_SPONSORS, SERIES, TYPES, TRACKS, CALENDARS, FIRST, LAST, TEAM_A, TEAM_B, SPONSORS, BODY_COLORS, PARTS, PART_W, FACILITIES, FAC_COST, POINTS, XP_PER_LEVEL,
+    VERSION, DRIVER_STATS, DEV_MAX, CAR2, SCOUTS, FEEDERS, CHANGELOG, MILESTONES, CUP_TROPHIES };
 })();

@@ -145,13 +145,47 @@ const Art = (() => {
       x.fillStyle = '#e6e6e6'; x.fillRect(0, h * 0.3, w, 2); x.fillStyle = '#b0b0b0'; x.fillRect(0, h * 0.3 + 2, w, 2);
       for (let b = 0; b < h * 0.7; b += 3) for (let a = 0; a < 2; a++) { x.fillStyle = ((b / 3) + a) % 2 ? '#1b1b1b' : '#f4f4f4'; x.fillRect(w * 0.45 + a * 3, h * 0.3 + 4 + b, 3, 3); }
       drawRot(x, carBig(lv, num), w * 0.62, h * 0.72, -0.25); drawRot(x, carBig(fixed[5], 31), w * 0.25, h * 0.6, -0.2);
+    } else if (kind === 'trophies') {
+      // wooden trophy cabinet with lit shelves
+      x.fillStyle = '#3b2414'; x.fillRect(0, 0, w, h); x.fillStyle = '#4e301b'; for (let i = 0; i < w; i += 6) x.fillRect(i, 0, 3, h);
+      x.fillStyle = '#6b4226'; x.fillRect(0, 0, w, 5); x.fillRect(0, 0, 5, h); x.fillRect(w - 5, 0, 5, h);
+      const shelves = [0.42, 0.74]; const items = [['cup', 'gold'], ['big', 'gold'], ['medal', 'silver'], ['cup', 'bronze'], ['star', 'gold'], ['flag', 'gold'], ['medal', 'gold'], ['cup', 'silver']];
+      let k = 0;
+      for (const sy of shelves) {
+        const y = Math.round(h * sy);
+        x.fillStyle = OUT; x.fillRect(4, y, w - 8, 5); x.fillStyle = '#a0683c'; x.fillRect(5, y + 1, w - 10, 3); x.fillStyle = '#c58a52'; x.fillRect(5, y + 1, w - 10, 1);
+        for (let xx = 10; xx < w - 16; xx += Math.max(18, Math.round(w / 4.2))) { const [kd, mt] = items[k++ % items.length]; const t = trophy(kd, mt); const sc = kd === 'big' ? 1 : 1.4; const tw = Math.round(t.width * sc), th = Math.round(t.height * sc); x.drawImage(t, xx, y - th, tw, th); }
+      }
+      x.fillStyle = 'rgba(255,255,255,0.18)'; for (let i = 0; i < 3; i++) { for (let yy = 0; yy < h; yy++) x.fillRect(Math.round(w * 0.2 + i * 6 + yy * 0.5), yy, 2, 1); }
+      x.fillStyle = '#6b4226'; x.fillRect(0, h - 6, w, 6);
     } else if (kind === 'news') {
       asphalt(x, w, h, '#4b4b4b');
     }
     return c;
   }
+
+  // ---------- trophies (v1.1) ----------
+  const METALS = { gold: ['#f2c81e', '#fff2a0', '#b08a10'], silver: ['#cfcfcf', '#ffffff', '#8a8a8a'], bronze: ['#c87a3a', '#f0b080', '#8a4a1a'] };
+  const TROPHY_PIX = {
+    cup: ['..OOOOOOOO..', 'OOGGGHGGGGOO', 'O.OGGHGGGO.O', 'O.OGGHGGGO.O', 'OO.OGGGGDO.OO'.slice(0, 12), '...OGGGDO...', '....OGDO....', '.....OO.....', '.....OO.....', '....OGGO....', '...OOOOOO...', '..OBBBBBBO..', '..OBBHBBBO..', '..OOOOOOOO..'],
+    medal: ['.OO....OO.', '.ORO..ORO.', '..ORO.RO..', '...ORRO...', '...OOOO...', '..OGGGGO..', '.OGGHGGGO.', '.OGHGGGDO.', '.OGGGGGDO.', '..OGGGDO..', '...OOOO...'],
+    big: ['......OO......', '.....OGHO.....', '..OOOOOOOOOO..', 'OOGGGGHGGGGGOO', 'O.OGGGHGGGGO.O', 'O.OGGHGGGGDO.O', 'O.OGGHGGGGDO.O', 'OO.OGGGGGDO.OO', '...OGGGGGDO...', '....OGGGDO....', '.....OGDO.....', '......OO......', '......OO......', '.....OGGO.....', '....OGGGGO....', '..OOOOOOOOOO..', '..OBBBBBBBBO..', '..OBBRRRRBBO..', '..OBBBBBBBBO..', '..OOOOOOOOOO..'],
+    flag: ['O...........', 'OOOOOOOOOOO.', 'OWKWKWKWKWO.', 'OKWKWKWKWKO.', 'OWKWKWKWKWO.', 'OKWKWKWKWKO.', 'OOOOOOOOOOO.', 'OO..........', 'OO..........', 'OO..........', 'OO..........', 'OGO.........', 'OOOOOOOO....', 'OBBBBBBO....'],
+    star: ['.....OO.....', '....OGGO....', '....OGHO....', 'OOOOOGHOOOOO', 'OGGGGGHGGGGO', '.OGGGHGGGDO.', '..OGGGGGDO..', '..OGGGGGDO..', '.OGGGDDGGDO.', '.OGGO..OGDO.', 'OGOO....OOGO', 'OO........OO'],
+  };
+  function trophy(kind, metal, locked) {
+    const key = 'T' + kind + metal + (locked ? 'L' : '');
+    if (cache[key]) return cache[key];
+    const pix = TROPHY_PIX[kind] || TROPHY_PIX.cup; const w = Math.max(...pix.map(r => r.length)), h = pix.length;
+    const [c, x] = mk(w, h); const m = METALS[metal] || METALS.gold;
+    const col = locked ? { O: '#141414', G: '#2c2c2c', H: '#3a3a3a', D: '#242424', B: '#202020', R: '#2c2c2c', W: '#3a3a3a', K: '#242424' }
+      : { O: OUT, G: m[0], H: m[1], D: m[2], B: '#3b2414', R: '#c4232b', W: '#f4f4f4', K: '#1b1b1b' };
+    pix.forEach((row, yy) => [...row].forEach((ch, xx) => { if (col[ch]) { x.fillStyle = col[ch]; x.fillRect(xx, yy, 1, 1); } }));
+    cache[key] = c; return c;
+  }
+  function trophyURL(kind, metal, locked) { const k = 'TU' + kind + metal + (locked ? 'L' : ''); if (!cache[k]) cache[k] = trophy(kind, metal, locked).toDataURL(); return cache[k]; }
   // tiny UI icons
   function gear(col) { const [c, x] = mk(9, 9); x.fillStyle = col || '#1b1b1b'; const p = ['..#.#.#..', '.#######.', '###...###', '.##...##.', '###...###', '.##...##.', '###...###', '.#######.', '..#.#.#..']; p.forEach((row, y) => [...row].forEach((ch, xx) => { if (ch === '#') x.fillRect(xx, y, 1, 1); })); return c.toDataURL(); }
   function icon(rows, col) { const [c, x] = mk(rows[0].length, rows.length); x.fillStyle = col; rows.forEach((row, y) => [...row].forEach((ch, xx) => { if (ch === '#') x.fillRect(xx, y, 1, 1); })); return c.toDataURL(); }
-  return { carBig, carSmall, carImg, carURL, tile, gear, icon, mk, drawRot, asphalt, crowd };
+  return { carBig, carSmall, carImg, carURL, tile, gear, icon, mk, drawRot, asphalt, crowd, trophy, trophyURL, METALS };
 })();

@@ -21,6 +21,7 @@
     document.addEventListener('gesturestart', e => e.preventDefault());
     document.addEventListener('dblclick', e => e.preventDefault());
     UI.hub();
+    UI.maybeWhatsNew();
   });
   window.addEventListener('error', e => console.error('GAME ERROR', e.message));
 })();

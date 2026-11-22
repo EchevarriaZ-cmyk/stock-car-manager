@@ -117,7 +117,7 @@ const Renderer = (() => {
       let s, ox, oy, big;
       if (this.mode === 'follow' && this.bgFollow) {
         s = 1; big = true;
-        const tgt = race.player() && race.player().status !== 'dnf' ? race.player() : race.order()[0];
+        const me = race.player(this.followId); const tgt = me && me.status !== 'dnf' ? me : race.order()[0];
         const p = g.pos(tgt.d, tgt.lat);
         if (!this.cam) this.cam = { x: p.x, y: p.y };
         const k = Math.min(1, (dtReal || 0.016) * 25); this.cam.x += (p.x - this.cam.x) * k; this.cam.y += (p.y - this.cam.y) * k;
@@ -139,11 +139,11 @@ const Renderer = (() => {
       };
       // cars: draw pit-lane first, then by d so leaders on top
       const cars = race.cars.filter(c => c.status !== 'dnf' || c.outT > 0).sort((a, b) => a.d - b.d);
-      let pl = null;
+      const marks = [];
       for (const c of cars) {
         const ang = c.yaw + (c.spin > 0 ? c.spin * 7 : 0) + (c.status === 'dnf' ? 0.6 : 0);
         const r = drawCar(c.e.livery, c.e.number, c.d, c.lat, ang);
-        if (c.isPlayer) pl = r;
+        if (c.isPlayer && r && c.status !== 'dnf') marks.push({ r, sel: c.id === (this.followId || race.playerId), slot: c.slot });
       }
       if (race.pace.active) drawCar({ body: '#f4f4f4', stripe: '#f2c81e', num: '#141414', pace: true }, 0, race.pace.d, g.lanes[0], 0);
       // smoke
@@ -155,11 +155,12 @@ const Renderer = (() => {
           x.fillRect(Math.round(p.x * s + ox + Math.cos(a) * r), Math.round(p.y * s + oy + Math.sin(a) * r), sz, sz);
         }
       }
-      // player marker
-      if (pl && Math.floor(this.t * 3) % 2 === 0) {
-        const yy = pl.cy - (big ? 22 : 9);
+      // team car markers: yellow arrow = car 1, cyan = car 2; the selected car blinks
+      for (const m of marks) {
+        if (m.sel && Math.floor(this.t * 3) % 2 === 1) continue;
+        const pl = m.r; const yy = pl.cy - (big ? 22 : 9);
         x.fillStyle = '#141414'; x.fillRect(pl.cx - 4, yy - 1, 9, 2); x.fillRect(pl.cx - 3, yy + 1, 7, 2); x.fillRect(pl.cx - 2, yy + 3, 5, 1);
-        x.fillStyle = '#ffe000'; x.fillRect(pl.cx - 3, yy, 7, 1); x.fillRect(pl.cx - 2, yy + 1, 5, 1); x.fillRect(pl.cx - 1, yy + 2, 3, 1); x.fillRect(pl.cx, yy + 3, 1, 1);
+        x.fillStyle = m.slot === 2 ? '#3ee8ff' : '#ffe000'; x.fillRect(pl.cx - 3, yy, 7, 1); x.fillRect(pl.cx - 2, yy + 1, 5, 1); x.fillRect(pl.cx - 1, yy + 2, 3, 1); x.fillRect(pl.cx, yy + 3, 1, 1);
       }
     }
   }
