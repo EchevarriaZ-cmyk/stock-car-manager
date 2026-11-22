@@ -20,3 +20,5 @@ Open `index.html` in a browser, or host the folder as-is on GitHub Pages (Settin
 - `js/main.js` – boot
 
 Saves go to localStorage automatically. Profile → Export/Import save code moves a career between devices.
+
+*Developer note* THIS IS A FUN PROJECT PLEASE ENJOY WHILE UPDATE CONTINUE
