@@ -21,4 +21,4 @@ Open `index.html` in a browser, or host the folder as-is on GitHub Pages (Settin
 
 Saves go to localStorage automatically. Profile → Export/Import save code moves a career between devices.
 
-    *Developer note* THIS IS A FUN PROJECT PLEASE ENJOY WHILE UPDATE CONTINUE TO BE PUSHED OUT IT IS A ONE MAN PROJECT AND I AM DEDICATED TO A AD FREE GAME FOR THE RACERS BY RHE RACER
+    *Developer note* THIS IS A FUN PROJECT PLEASE ENJOY WHILE UPDATE CONTINUE TO BE PUSHED OUT IT IS A ONE MAN PROJECT AND I AM DEDICATED TO A AD FREE GAME FOR THE RACERS BY THE RACER
