@@ -185,7 +185,7 @@ const Game = (() => {
     S = { version: SAVE_VERSION, mode: o.mode, profile: o.profile || 'MANAGER', xp: 0, level: 1, rep: o.mode === 'hired' ? 15 : 12,
       season: 1, year: 2027, seriesIdx: 0, week: 1, day: 1, money: 0, ep: 20,
       team: null, drivers: {}, freeAgents: [], ai: [], offers: [], schedule: [], results: [], standings: {}, news: [], history: [],
-      hired: null, playoff: null, jobOffers: [], trophies: { log: [], unseen: 0 }, stats: { races: 0, wins: 0, top5: 0, top10: 0, top15: 0, poles: 0, titles: 0 }, seasonOver: false, gameOver: false, tutorial: true,
+      realTracks: true, hired: null, playoff: null, jobOffers: [], trophies: { log: [], unseen: 0 }, stats: { races: 0, wins: 0, top5: 0, top10: 0, top15: 0, poles: 0, titles: 0 }, seasonOver: false, gameOver: false, tutorial: true,
       scout: { list: [], week: 0, trips: 0 } };
     const s = DATA.SERIES[0];
     if (o.mode === 'owner') {
@@ -540,6 +540,8 @@ const Game = (() => {
     const tag = (tc) => two ? ' #' + tc.number : '';
     // money
     for (const { tc, r } of cars) sum.lines.push(['PURSE' + tag(tc) + ' (' + U.ordinal(r.pos) + ')', purse(r.pos)]);
+    const ev = DATA.eventName(S.seriesIdx, S.week); sum.event = ev;
+    if (ev === 'DAYTONA 500') sum.lines.push(['DAYTONA 500 BONUS PURSE', Math.round(cars.reduce((a, x) => a + purse(x.r.pos), 0) * 0.5 / 100) * 100]);
     let spTotal = 0, bonusTotal = 0;
     const byCar = { 1: me, 2: me2 };
     for (const sp of allSponsors()) {
@@ -797,7 +799,7 @@ const Game = (() => {
     if (S.hired) { const tgt = Math.round(ser().minBudget * (S.team.car2 ? 1.1 : 0.8)); if (S.money < tgt) { news(S.hired.owner + ' TOPS UP THE BUDGET TO ' + U.money(tgt) + '.'); S.money = tgt; } S.hired.confidence = Math.max(S.hired.confidence, 50); }
     S.schedule = DATA.CALENDARS[tier].slice();
     resetStandings(); refreshOffers();
-    news('SEASON ' + S.year + ' ' + ser().name + ' BEGINS AT ' + DATA.TRACKS[S.schedule[0]].short + '.');
+    news('SEASON ' + S.year + ' ' + ser().name + ' BEGINS AT ' + DATA.TRACKS[S.schedule[0]].short + (DATA.eventName(S.seriesIdx, 1) ? ' WITH THE ' + DATA.eventName(S.seriesIdx, 1) : '') + '.');
     save();
   }
 
@@ -810,9 +812,24 @@ const Game = (() => {
     for (const j of o.jobOffers || []) { migrateDriver(j.driver); if (j.driver2) migrateDriver(j.driver2); }
     if (o.team) { if (o.team.car2 === undefined) o.team.car2 = null; if (!Array.isArray(o.team.dev)) o.team.dev = []; }
     if (!o.scout) o.scout = { list: [], week: 0, trips: 0 };
+    migrateTracks(o);
     if (!o.trophies) o.trophies = backfillTrophies(o);
     if (from < 2) { o.migratedFrom = from; o.version = SAVE_VERSION; }
     return o;
+  }
+  // v1.2: made-up tracks became real ones. Map old ids everywhere they appear (schedule, results, trophies, news).
+  function migrateTracks(o) {
+    if (o.realTracks) return;
+    const map = (t) => DATA.TRACKS[t] ? t : (DATA.OLD_TRACKS[t] || 'daytona');
+    if (Array.isArray(o.schedule)) o.schedule = o.schedule.map(map);
+    for (const r of o.results || []) if (r && r.track) r.track = map(r.track);
+    if (o.trophies && Array.isArray(o.trophies.log)) for (const e of o.trophies.log) {
+      const m = /^(win|pod):(.+)$/.exec(e.k || ''); if (m) e.k = m[1] + ':' + map(m[2]);
+      if (e.track) e.track = map(e.track);
+    }
+    const re = new RegExp('\\b(' + Object.keys(DATA.OLD_SHORT).join('|') + ')\\b', 'g');
+    for (const n of o.news || []) if (n && n.text) n.text = n.text.replace(re, (x) => DATA.OLD_SHORT[x]);
+    o.realTracks = true;
   }
   // older saves: rebuild what we can from this season's results and the season history
   function backfillTrophies(o) {
@@ -847,7 +864,7 @@ const Game = (() => {
   }
   function wipe() { localStorage.removeItem(SAVE_KEY); S = null; }
   return {
-    get S() { return S; }, ser, news, award, trophyCount, trophyName, teamWins, save, load, exportCode, importCode, wipe, newCareer, genJob, migrate,
+    get S() { return S; }, ser, migrateTracks, news, award, trophyCount, trophyName, teamWins, save, load, exportCode, importCode, wipe, newCareer, genJob, migrate,
     hasCar, buyCar, signingBonus, sponsorInterest, ovr, driverTypeRating, driverName, driverShort, myDriver, carDriver, askSalary, minRepFor, hireCost, hireDriver, fireDriver, releaseDriver, fireCost,
     assignDriver, slotOf, slotOpen, firstOpenSlot, teamCars, teamDriverIds, potStars,
     car2Price, car2RunCost, car2Status, buyCar2, sellCar2,

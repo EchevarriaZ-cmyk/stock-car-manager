@@ -36,7 +36,7 @@ const RaceSim = (() => {
 
   class Race {
     constructor(opts) {
-      this.geom = opts.geom; this.T = DATA.TYPES[this.geom.type]; this.type = this.geom.type;
+      this.geom = opts.geom; this.T = this.geom.T || DATA.TYPES[this.geom.type]; this.type = this.geom.type;
       this.laps = this.T.laps; this.stages = this.T.stages.slice();
       this.lapTime = this.T.lapTime; this.baseV = 1 / this.lapTime;
       this.paceF = 0.55; this.t = 0; this.flag = 'green'; this.phase = 'racing';
@@ -67,7 +67,7 @@ const RaceSim = (() => {
       const n = this.cars.length;
       this.cars.forEach((c, i) => { c.stall = 0.12 + 0.76 * (i / Math.max(1, n - 1)); });
       this.cars.forEach(c => c.lastFrac = this.frac(c.d));
-      this.msg('GREEN FLAG! ' + this.laps + ' LAPS AT ' + this.geom.def.short, 'green');
+      this.msg('GREEN FLAG! ' + (this.geom.event ? 'THE ' + this.geom.event + ' - ' : '') + this.laps + ' LAPS AT ' + this.geom.def.short, 'green');
     }
     frac(d) { return d - Math.floor(d); }
     msg(text, kind) { this.log.push({ t: this.t, text, kind: kind || 'info' }); if (this.log.length > 40) this.log.shift(); this.onEvent('msg', { text, kind }); }

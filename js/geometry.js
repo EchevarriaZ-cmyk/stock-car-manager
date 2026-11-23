@@ -3,11 +3,14 @@
 class TrackGeom {
   constructor(trackId) {
     const def = DATA.TRACKS[trackId];
-    this.id = trackId; this.def = def; this.type = def.type; this.T = DATA.TYPES[def.type];
+    this.id = trackId; this.def = def; this.type = def.type; this.T = DATA.trackT(trackId);
     const sh = def.shape;
     let pts = [];
     if (sh.kind === 'oval' || sh.kind === 'trioval') pts = this._oval(sh.straight, sh.r, sh.kind === 'trioval' ? sh.bump : 0);
+    else if (sh.kind === 'rp') pts = this._rpoly(sh.v, sh.sf);
     else pts = this._road(sh.pts);
+    // v1.2: scale every layout to its real lap length (compressed so short tracks still fit the screen)
+    if (def.miles) { const target = this.T.perim; let per = 0; for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; per += Math.hypot(b[0] - a[0], b[1] - a[1]); } const k = target / per; pts = pts.map(([x, y]) => [x * k, y * k]); }
     this._resample(pts, 3);
     // widths & lanes
     if (this.type === 'superspeedway') { this.hw = 46; this.lanes = [-24, 0, 24]; }
@@ -15,7 +18,9 @@ class TrackGeom {
     else { this.hw = 36; this.lanes = [-14, 12]; }
     this.pitLat = -(this.hw + 36);
     // pit lane range along the frontstretch (wraps across frac 0)
-    const halfStraight = sh.kind === 'road' ? Math.hypot(sh.pts[1][0] - sh.pts[0][0], sh.pts[1][1] - sh.pts[0][1]) * 0.45 : sh.straight / 2 * 0.95;
+    let halfStraight;
+    if (sh.kind === 'rp' || (sh.kind === 'road' && def.miles)) halfStraight = this._straightHalf(sh.kind === 'road' ? 0.35 : 0.3);
+    else halfStraight = sh.kind === 'road' ? Math.hypot(sh.pts[1][0] - sh.pts[0][0], sh.pts[1][1] - sh.pts[0][1]) * 0.45 : sh.straight / 2 * 0.95;
     const hf = Math.min(0.12, halfStraight / this.L);
     this.pitStart = 1 - hf; this.pitEnd = hf; this.pitRange = hf * 2;
     // bbox with margins
@@ -37,6 +42,36 @@ class TrackGeom {
     for (let a = -90; a > -270; a -= 2) { const t = a * Math.PI / 180; push(-S / 2 + r * Math.cos(t), r * Math.sin(t)); }
     for (let x = -S / 2; x < 0; x += step) push(x, fy(x));
     return pts;
+  }
+  // distance from the start line (index 0) to where the track starts turning, both ways; pit lane fits inside
+  _straightHalf(maxTurn) {
+    const M = this.M; const walk = (dir) => { let turn = 0, dist = 0; for (let k = 1; k < M / 2; k++) { const i = ((dir * k) % M + M) % M, j = ((dir * (k - 1)) % M + M) % M; let da = this.A[i] - this.A[j]; if (da > Math.PI) da -= 2 * Math.PI; if (da < -Math.PI) da += 2 * Math.PI; turn += Math.abs(da); if (turn > maxTurn) break; dist += 3; } return dist; };
+    return Math.max(60, Math.min(walk(1), walk(-1)) * 0.92);
+  }
+  // rounded polygon: verts [x, y, r]. Start/finish = middle of the last edge, or the arc of vertex sf.
+  _rpoly(V, sf) {
+    const n = V.length; const pts = []; const arcs = [];
+    for (let i = 0; i < n; i++) {
+      const P = V[(i - 1 + n) % n], C = V[i], N = V[(i + 1) % n];
+      let ax = P[0] - C[0], ay = P[1] - C[1], bx = N[0] - C[0], by = N[1] - C[1]; const la = Math.hypot(ax, ay), lb = Math.hypot(bx, by); ax /= la; ay /= la; bx /= lb; by /= lb;
+      const th = Math.acos(U.clamp(ax * bx + ay * by, -1, 1)); let r = C[2]; let t = r / Math.tan(th / 2); const tmax = 0.49 * Math.min(la, lb); if (t > tmax) { t = tmax; r = t * Math.tan(th / 2); }
+      const t1 = [C[0] + ax * t, C[1] + ay * t], t2 = [C[0] + bx * t, C[1] + by * t];
+      let mx = ax + bx, my = ay + by; const ml = Math.hypot(mx, my) || 1; mx /= ml; my /= ml; const dc = r / Math.sin(th / 2); const cx = C[0] + mx * dc, cy = C[1] + my * dc;
+      let a1 = Math.atan2(t1[1] - cy, t1[0] - cx), a2 = Math.atan2(t2[1] - cy, t2[0] - cx); let da = a2 - a1; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+      const steps = Math.max(2, Math.ceil(Math.abs(da) * r / 6)); const start = pts.length;
+      for (let k = 0; k <= steps; k++) { const a = a1 + da * k / steps; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); }
+      arcs.push([start, pts.length - 1]);
+      // straight to next vertex's arc is implied by the next arc's first point; add midpoints so the straight resamples evenly
+      const nx = V[(i + 1) % n]; void nx;
+    }
+    // start index
+    let s0;
+    if (sf !== undefined) { const [a, b] = arcs[sf]; s0 = Math.round((a + b) / 2); }
+    else { const last = arcs[n - 1][1], first = 0; const A = pts[last], B = pts[first]; pts.push([(A[0] + B[0]) / 2, (A[1] + B[1]) / 2]); s0 = pts.length - 1; }
+    let rot = pts.slice(s0).concat(pts.slice(0, s0));
+    let area = 0; for (let i = 0; i < rot.length; i++) { const a = rot[i], b = rot[(i + 1) % rot.length]; area += a[0] * b[1] - b[0] * a[1]; }
+    if (area > 0) rot = [rot[0]].concat(rot.slice(1).reverse());
+    return rot;
   }
   _road(cp) {
     // closed Catmull-Rom; start at midpoint of first segment
