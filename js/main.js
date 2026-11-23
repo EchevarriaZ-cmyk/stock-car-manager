@@ -14,10 +14,12 @@
     document.getElementById('rotate').innerHTML = `<img class="pix phone" src="${c.toDataURL()}" style="width:80px;height:128px" alt="">${PF.img('ROTATE YOUR PHONE', { scale: 3, shadow: '#1b1b1b' })}${PF.img('STOCK CAR MANAGER\nPLAYS IN LANDSCAPE', { scale: 2 })}`;
   }
   window.addEventListener('DOMContentLoaded', () => {
-    bgPattern(); rotateArt();
+    VIEW.fit(); bgPattern(); rotateArt();
     Game.load();
     document.addEventListener('click', UI.onClick);
-    let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(UI.onResize, 150); });
+    Input.init();
+    // v1.2.1: refit the stage at once (desktop scaling), then redraw the screen once resizing settles
+    let rt, zc = false; window.addEventListener('resize', () => { if (VIEW.fit()) zc = true; clearTimeout(rt); rt = setTimeout(() => { const z = zc; zc = false; UI.onResize(z); }, 150); });
     document.addEventListener('gesturestart', e => e.preventDefault());
     document.addEventListener('dblclick', e => e.preventDefault());
     UI.hub();

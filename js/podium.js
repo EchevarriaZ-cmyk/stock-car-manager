@@ -10,7 +10,7 @@ const Podium = (() => {
       this.resize();
     }
     resize() {
-      const r = this.cv.getBoundingClientRect(); const px = r.height < 300 ? 2 : 3;
+      const r = this.cv.getBoundingClientRect(); const z = (typeof VIEW !== 'undefined' && VIEW.zoom) || 1; const px = Math.max(2, Math.round((r.height / z < 300 ? 2 : 3) * z));
       this.W = Math.max(160, Math.floor(r.width / px)); this.H = Math.max(100, Math.floor(r.height / px));
       this.cv.width = this.W; this.cv.height = this.H; this.x = this.cv.getContext('2d'); this.x.imageSmoothingEnabled = false;
       this.bg = this.drawBG();

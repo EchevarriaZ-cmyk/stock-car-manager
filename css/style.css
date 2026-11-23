@@ -382,3 +382,46 @@ button { text-transform: uppercase; }
 .dash-next { gap: 3px; }
 .dash-cal .dp-title { margin-bottom: 3px; padding-bottom: 2px; }
 .dash-path .ck { line-height: 1.3; }
+/* =================== v1.2.1 PC SUPPORT =================== */
+/* game stage: on phones #frame is the whole screen (same as v1.2); on desktop view.js sizes + zooms it */
+#stage { position: fixed; inset: 0; z-index: 1; overflow: hidden; }
+#frame { position: absolute; inset: 0; }
+#app { position: absolute; inset: 0; }
+.modal-wrap { position: absolute; }
+.toast { position: absolute; max-width: 80%; }
+/* the rotate-your-phone prompt is for touch phones only, never for a narrow desktop window */
+@media (orientation: portrait) and (max-width: 900px) and (hover: hover) and (pointer: fine) { #rotate { display: none; } }
+body.pc #stage { inset: auto; overflow: visible; box-shadow: 0 0 0 3px #0d0e10, 0 0 0 100vmax rgba(5,6,8,.55); }
+body.pc #frame { position: absolute; inset: auto; left: 0; top: 0; overflow: hidden; }
+body.pc { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body.pc img.pf, body.pc img.pix, body.pc canvas, body.pc img.art { image-rendering: pixelated; }
+/* mouse: hover states, pointer cursor, focus ring for keyboard users, thin visible scrollbars */
+@media (hover: hover) and (pointer: fine) {
+  button:not([disabled]), [data-act] { cursor: pointer; }
+  button[disabled], .btn.disabled { cursor: not-allowed; }
+  .ptile:not(.locked):hover, .tile:not(.locked):hover { filter: brightness(1.15); box-shadow: inset 0 0 0 3px var(--neon), 0 0 12px rgba(230,255,43,.3), 0 3px 0 rgba(0,0,0,.4); }
+  .ptile.locked:hover { filter: grayscale(.85) brightness(.72); }
+  .btn:not([disabled]):not(.disabled):hover, .go-race:hover, .dd-port:hover, .swatch:hover, .pc-go:hover { filter: brightness(1.18); }
+  .dash-ib:hover, .pick-card:hover, button.panel:hover, .pw-bot .profile-btn:hover, .pw-bot .ver-btn:hover, .ticker:hover { filter: brightness(1.12); box-shadow: inset 0 0 0 2px var(--neon), 0 3px 0 rgba(0,0,0,.4); }
+  .list-row[data-act]:hover { background: #3a3f48; box-shadow: inset 0 0 0 2px #6b727c; }
+  .list-row.me[data-act]:hover { background: #434a16; } .list-row.me2[data-act]:hover { background: #17454d; }
+  .troph:hover { background: rgba(255,255,255,.1); }
+  .tbl tr:hover td { background: rgba(255,255,255,.05); }
+  button:focus-visible, [tabindex]:focus-visible { outline: 3px solid var(--neon); outline-offset: 2px; }
+  .page-body, .modal, .race-side, .shelf, .hscroll, .hub-scroll { scrollbar-width: thin; scrollbar-color: #5a616d transparent; }
+  .shelf { padding-bottom: 2px; }
+  /* keyboard hints (ESC, ENTER, 1-4...), desktop only */
+  .btn[data-kh]:not(.pod-go), .go-race[data-kh] { position: relative; }
+  [data-kh]:not([data-kh=""])::after { content: attr(data-kh); position: absolute; left: 3px; top: 3px; z-index: 4; pointer-events: none;
+    font: 900 8px/9px "Lucida Console", "Courier New", ui-monospace, monospace; letter-spacing: 0; color: var(--neon); background: #0d0e10;
+    border: 1px solid #4a505b; border-radius: 3px; padding: 0 3px; text-shadow: none; text-transform: uppercase; opacity: .92; }
+  .ptile[data-kh]::after { left: 8px; top: 8px; }
+  .go-race[data-kh]::after { left: 6px; top: 6px; }
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn.back[data-kh], .btn[data-kh="ESC"] { padding-left: 34px; }
+  [data-kh][disabled]::after { display: none; }
+  .btn.back[data-kh]::after, .btn[data-kh="ESC"]::after { left: 5px; top: 50%; transform: translateY(-50%); }
+}
+/* desktop: trophy shelves wrap onto extra rows instead of hiding trophies off to the side */
+body.pc .shelf { flex-wrap: wrap; overflow-x: visible; row-gap: 8px; }

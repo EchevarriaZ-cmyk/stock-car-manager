@@ -100,6 +100,8 @@ const Renderer = (() => {
     }
     resize() {
       const r = this.cv.getBoundingClientRect();
+      // v1.2.1: on a zoomed desktop stage keep the same chunky pixels as on a phone (2 logical px per art pixel)
+      this.px = Math.max(2, Math.round(2 * ((typeof VIEW !== 'undefined' && VIEW.zoom) || 1)));
       const bw = Math.max(80, Math.floor(r.width / this.px)), bh = Math.max(60, Math.floor(r.height / this.px));
       if (bw === this.bw && bh === this.bh) return;
       this.bw = bw; this.bh = bh; this.cv.width = bw; this.cv.height = bh;

@@ -88,6 +88,13 @@ const PF = (() => {
     for (const ch of str) { const g = D3[ch]; if (!g) continue; for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) if (g[r][c] === '#') ctx.fillRect(cx + c, y + r, 1, 1); cx += 4; }
   }
   const cache = {};
+  // real screen pixels per CSS px inside the game stage (devicePixelRatio x desktop zoom)
+  // (phones/touch keep the v1.2 rule exactly: at least 2x, rounded to a whole devicePixelRatio)
+  function effScale() {
+    const dpr = window.devicePixelRatio || 1;
+    if (typeof VIEW === 'undefined' || !VIEW.desktop) return Math.max(2, Math.round(dpr));
+    return dpr * VIEW.zoom;
+  }
   // Returns a 1x canvas (outline padding 1px, optional shadow) for multi-line text
   function canvas(text, o) {
     o = o || {};
@@ -107,7 +114,9 @@ const PF = (() => {
   }
   // High-res render: each font pixel = scale*k device pixels, crisp thin outline + drop shadow
   function hiCanvas(text, o) {
-    o = o || {}; const sc = o.scale || 2; const k = Math.max(2, Math.round(window.devicePixelRatio || 1)); const u = sc * k;
+    // v1.2.1: one font pixel = a whole number of real screen pixels at any devicePixelRatio and any
+    // desktop zoom (was: always >= 2x then shrunk, which made the font uneven on 1x desktop screens)
+    o = o || {}; const sc = o.scale || 2; const k = effScale(); const u = Math.max(1, Math.round(sc * k));
     const color = o.color || '#fff'; const ocol = o.outline === undefined ? '#1b1b1b' : o.outline;
     const ol = ocol ? Math.max(1, Math.round(u / 4)) : 0; const sh = o.shadow ? Math.max(1, Math.round(u / 3)) : 0; const shcol = typeof o.shadow === 'string' ? o.shadow : '#1b1b1b';
     const lines = String(text).split('\n'); const lh = 9;
@@ -125,7 +134,7 @@ const PF = (() => {
     return { c, k };
   }
   function url(text, o) {
-    const key = text + '|' + JSON.stringify(o || {});
+    const key = text + '|' + JSON.stringify(o || {}) + '|' + effScale();
     if (!cache[key]) { const r = hiCanvas(text, o); cache[key] = { u: r.c.toDataURL(), w: r.c.width / r.k, h: r.c.height / r.k }; }
     return cache[key];
   }

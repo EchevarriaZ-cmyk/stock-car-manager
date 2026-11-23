@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.1 — PC support (Nov 23, 2026)
+- **PC support: better scaling, mouse and keyboard.**
+- **Scaling:** on a computer the game is laid out at a phone-like size and scaled up to fit the window, centred, with a sensible shape (letterboxed on 4:3 and ultra-wide screens). No giant stretched tiles, no tiny text. Checked at 1280x720, 1366x768, 1920x1080 and 1024x768.
+- **Sharp pixel font:** the pixel font now lands on whole screen pixels at any display scaling (it used to look uneven on 1x desktop screens). The race view and podium keep the same chunky pixels as on a phone.
+- **Mouse:** hover highlights on tiles, buttons, cards and list rows, a pointer cursor, and click works everywhere tap does. The mouse wheel scrolls lists, and turns into sideways scrolling on card rows (like sponsor offers) once the page can't scroll any further. Trophy shelves wrap onto extra rows on desktop so every trophy shows. Thin scrollbars show on desktop.
+- **Keyboard:** Esc = back / close, Enter or Space = Go Race / confirm. Race day: 1 Push, 2 Normal, 3 Save, 4 or P Pit Now, Up/Down arrows change pace, T (or Left/Right) switches car, C camera, F speed. Pit menus: 1-4 to pick, Enter = the crew chief's call, Esc = cancel. Small key hints show on computers only (mouse + keyboard), never on phones.
+- **No rotate-your-phone prompt on computers**, even in a tall, narrow window.
+- **Phones unchanged:** 844x390 and 740x360 landscape play exactly as in v1.2. v1.0, v1.1 and v1.2 saves all load. The update pop-up only appears for new feature versions, so this patch just lights the NEW dot on the version label.
+
 ## v1.2 — Pit Wall (Nov 22, 2026)
 - **New Pit Wall look:** the whole game moves to a dark pit-wall theme with charcoal panels, checkered-flag trim on every header, and neon yellow and red accents. Garage, Drivers, Facilities, Sponsors, Calendar, Standings, Trophies, Profile, News, the Update Log and race-day menus all match.
 - **New main hub, every tile on one screen:** Go Race, Garage, Drivers, Facilities, Sponsors, Calendar, Standings, Trophies and a big Career tile with a mini Road-to-the-Cup bar (ARCA > TRUCKS > O'REILLY > CUP, with a YOU marker). No sideways scrolling on 844x390 or 740x360 phones. The top bar shows the team name, car, week/day and money.
