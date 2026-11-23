@@ -1,9 +1,9 @@
 /* Track geometry: builds a closed centerline path for any track shape */
 'use strict';
 class TrackGeom {
-  constructor(trackId) {
+  constructor(trackId, seriesIdx) {
     const def = DATA.TRACKS[trackId];
-    this.id = trackId; this.def = def; this.type = def.type; this.T = DATA.trackT(trackId);
+    this.id = trackId; this.def = def; this.type = def.type; this.T = DATA.raceT(trackId, seriesIdx); this.seriesIdx = seriesIdx;
     const sh = def.shape;
     let pts = [];
     if (sh.kind === 'oval' || sh.kind === 'trioval') pts = this._oval(sh.straight, sh.r, sh.kind === 'trioval' ? sh.bump : 0);
@@ -16,17 +16,33 @@ class TrackGeom {
     if (this.type === 'superspeedway') { this.hw = 46; this.lanes = [-24, 0, 24]; }
     else if (this.type === 'road') { this.hw = 30; this.lanes = [-10, 10]; }
     else { this.hw = 36; this.lanes = [-14, 12]; }
-    this.pitLat = -(this.hw + 36);
-    // pit lane range along the frontstretch (wraps across frac 0)
-    let halfStraight;
-    if (sh.kind === 'rp' || (sh.kind === 'road' && def.miles)) halfStraight = this._straightHalf(sh.kind === 'road' ? 0.35 : 0.3);
-    else halfStraight = sh.kind === 'road' ? Math.hypot(sh.pts[1][0] - sh.pts[0][0], sh.pts[1][1] - sh.pts[0][1]) * 0.45 : sh.straight / 2 * 0.95;
-    const hf = Math.min(0.12, halfStraight / this.L);
-    this.pitStart = 1 - hf; this.pitEnd = hf; this.pitRange = hf * 2;
+    // v1.3 pit road: entry off the track before the start/finish (commitment line), a row of evenly spaced
+    // pit boxes (one per car, pole gets the box nearest the exit), and the exit merging back in turn 1/2.
+    this.pitLat = -(this.hw + 32); this.boxLat = -(this.hw + 51);
+    const nCars = seriesIdx !== undefined && seriesIdx !== null && DATA.SERIES[seriesIdx] ? DATA.SERIES[seriesIdx].cars : 32; this.nBoxes = nCars;
+    const L = this.L;
+    let zone, entry, exit;
+    if (this.type !== 'road' && sh.kind === 'rp') {
+      // ovals: a long pit road; on short tracks it wraps into the turns (like Bristol and Martinsville)
+      // boxes are ~1.25 car lengths apart so stopped cars have room; that needs more pit road than a squeezed
+      // game track has frontstretch, so on most ovals the box row also runs into turns 1-2 and 3-4
+      entry = Math.max(70, 0.032 * L); exit = Math.max(100, 0.06 * L); zone = nCars * 40;
+      const max = 0.66 * L; if (zone + entry + exit > max) zone = max - entry - exit;
+      this.boxAt = 0.45; // share of the boxes before the start/finish line
+    } else {
+      let halfStraight;
+      if (sh.kind === 'rp' || (sh.kind === 'road' && def.miles)) halfStraight = this._straightHalf(sh.kind === 'road' ? 0.35 : 0.3);
+      else halfStraight = sh.kind === 'road' ? Math.hypot(sh.pts[1][0] - sh.pts[0][0], sh.pts[1][1] - sh.pts[0][1]) * 0.45 : sh.straight / 2 * 0.95;
+      if (def.kart) { zone = Math.min(0.17 * L, nCars * 18); entry = 26; exit = 30; } // karts: a pit / grid lane along the main straight
+      else { zone = Math.min(0.22 * L, Math.max(halfStraight * 1.6, nCars * 22)); entry = Math.max(40, halfStraight * 0.2); exit = Math.max(50, halfStraight * 0.25); }
+      this.boxAt = 0.5;
+    }
+    this.pitStart = 1 - (zone * this.boxAt + entry) / L; this.pitEnd = (zone * (1 - this.boxAt) + exit) / L; this.pitRange = (zone + entry + exit) / L;
+    this.boxA = entry / L; this.boxB = (entry + zone) / L; this.boxLen = zone / nCars;
     // bbox with margins
     let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
     for (let i = 0; i < this.M; i++) { minX = Math.min(minX, this.X[i]); maxX = Math.max(maxX, this.X[i]); minY = Math.min(minY, this.Y[i]); maxY = Math.max(maxY, this.Y[i]); }
-    const m = this.hw + 110;
+    const m = this.hw + 122;
     this.ox = -minX + m; this.oy = -minY + m;
     for (let i = 0; i < this.M; i++) { this.X[i] += this.ox; this.Y[i] += this.oy; }
     this.W = Math.ceil(maxX - minX + m * 2); this.H = Math.ceil(maxY - minY + m * 2);
@@ -121,4 +137,6 @@ class TrackGeom {
   }
   inPitZone(frac) { const p = ((frac - this.pitStart) % 1 + 1) % 1; return p <= this.pitRange; }
   pitProg(frac) { return ((frac - this.pitStart) % 1 + 1) % 1; }
+  // pit-progress where box k (0 = nearest the entry) is; st = 0..1 share of the box row
+  boxProg(st) { return this.boxA + (this.boxB - this.boxA) * U.clamp(st, 0, 1); }
 }

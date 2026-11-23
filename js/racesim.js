@@ -65,7 +65,8 @@ const RaceSim = (() => {
         };
       });
       const n = this.cars.length;
-      this.cars.forEach((c, i) => { c.stall = 0.12 + 0.76 * (i / Math.max(1, n - 1)); });
+      // v1.3: every car has its own box; the pole sitter gets the one nearest pit exit
+      this.cars.forEach((c, i) => { c.stall = 1 - (i + 0.5) / Math.max(1, n); });
       this.cars.forEach(c => c.lastFrac = this.frac(c.d));
       this.msg('GREEN FLAG! ' + (this.geom.event ? 'THE ' + this.geom.event + ' - ' : '') + this.laps + ' LAPS AT ' + this.geom.def.short, 'green');
     }
@@ -209,11 +210,11 @@ const RaceSim = (() => {
         if (c.spin > 0) c.spin -= dt;
         if (inPit) {
           const prog = g.pitProg(this.frac(c.d));
-          const pv = bv * 0.42;
+          const pv = bv * 0.5; // pit road speed limit (longer v1.3 pit roads)
           if (c.pit.phase === 'lane') {
             desired = pv;
-            if (prog >= c.stall * g.pitRange) {
-              c.pit.phase = 'stop'; c.v = 0; desired = 0;
+            if (prog >= (g.boxProg ? g.boxProg(c.stall) : c.stall * g.pitRange)) {
+              c.pit.phase = 'stop'; c.v = 0; desired = 0; if (g.boxLat) c.latT = g.boxLat;
               const base = PIT_TIME[c.pit.type] * this.lapTime;
               const ps = c.e.pit === undefined ? 50 : c.e.pit; // driver hitting the marks on pit road
               let time = base * (1.3 - c.crew * 0.5) * (1.07 - ps / 100 * 0.14) + (c.damage > 0.05 ? (0.2 + c.damage) * this.lapTime : 0);
@@ -226,7 +227,7 @@ const RaceSim = (() => {
               const ty = c.pit.type;
               if (ty === 'four') c.tire = 1; else if (ty === 'two') c.tire = Math.min(1, (c.tire + 1) / 2 + 0.05);
               c.fuel = 1; if (c.damage > 0.05) c.damage *= 0.35;
-              c.pit.phase = 'exit';
+              c.pit.phase = 'exit'; c.latT = g.pitLat;
               if (c.isPlayer) this.msg(this.tag(c) + 'PIT STOP DONE: ' + ({ four: '4 TIRES', two: '2 TIRES', fuel: 'FUEL' })[ty] + ' - GO GO GO!', 'player');
             }
           } else if (c.pit.phase === 'exit') {

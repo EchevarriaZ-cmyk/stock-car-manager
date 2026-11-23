@@ -24,8 +24,10 @@ const Renderer = (() => {
     const W = Math.ceil(geom.W * s), H = Math.ceil(geom.H * s);
     const [c, x] = Art.mk(W, H);
     const hw = geom.hw, isRoad = geom.type === 'road';
-    x.fillStyle = PAL[0]; x.fillRect(0, 0, W, H);
-    x.fillStyle = PAL[1];
+    // v1.3: street courses sit in a concrete city block instead of grass
+    const street = !!geom.def.street;
+    x.fillStyle = street ? PAL[12] : PAL[0]; x.fillRect(0, 0, W, H);
+    x.fillStyle = street ? PAL[10] : PAL[1];
     const band = Math.max(3, 28 * s);
     for (let i = -H; i < W + H; i += band * 2) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + band, 0); x.lineTo(i + band - H * 0.6, H); x.lineTo(i - H * 0.6, H); x.closePath(); x.fill(); }
     const K = Math.max(60, Math.round(geom.M / 2));
@@ -38,10 +40,11 @@ const Renderer = (() => {
     const ring = (a, b, col) => { x.fillStyle = col; x.beginPath(); for (const o of [a, b]) { const p = poly(o, 0, 1); x.moveTo(p[0][0], p[0][1]); for (const q of p) x.lineTo(q[0], q[1]); x.closePath(); } x.fill('evenodd'); };
     const seg = (a, b, f0, f1, col) => { x.fillStyle = col; x.beginPath(); const A = poly(a, f0, f1), B = poly(b, f0, f1, true); x.moveTo(A[0][0], A[0][1]); for (const q of A.concat(B)) x.lineTo(q[0], q[1]); x.closePath(); x.fill(); };
     const ps = geom.pitStart, pe = geom.pitEnd;
-    // grandstands along frontstretch (outside)
-    seg(hw + 16, hw + 92, ps - 0.03, pe + 0.03, PAL[10]);
-    for (let o = hw + 20; o < hw + 92; o += 8) seg(o, o + 2, ps - 0.03, pe + 0.03, PAL[11]);
+    // v1.3 grandstands where the real ones are (outside the wall)
+    const stands = DATA.standsFor(geom.id);
+    for (const [f0, f1, dep] of stands) { seg(hw + 16, hw + 16 + dep, f0, f1, PAL[10]); for (let o = hw + 20; o < hw + 16 + dep; o += 8) seg(o, o + 2, f0, f1, PAL[11]); }
     if (!isRoad) { ring(hw, hw + 5, PAL[6]); ring(hw + 8, hw + 10, PAL[7]); }
+    else if (street) { ring(hw, hw + 6, PAL[9]); ring(-hw - 6, -hw, PAL[9]); ring(hw + 6, hw + 7, PAL[13]); ring(-hw - 7, -hw - 6, PAL[13]); }
     else { ring(hw, hw + 4, PAL[6]); ring(-hw - 4, -hw, PAL[6]); }
     // track surface + apron
     if (!isRoad) ring(-hw - 14, -hw, PAL[5]);
@@ -50,19 +53,22 @@ const Renderer = (() => {
     if (geom.type === 'superspeedway') ring(geom.lanes[2] - 4, geom.lanes[2] + 4, PAL[4]);
     if (!isRoad) { ring(-hw, -hw + 2, PAL[8]); ring(-hw + 3.5, -hw + 5, PAL[8]); ring(hw - 3, hw - 1.5, PAL[9]); }
     else ring(hw - 2, hw - 1, PAL[9]), ring(-hw + 1, -hw + 2, PAL[9]);
-    // pit road
-    const ramp = Math.min(0.03, geom.pitRange * 0.18);
-    seg(-hw - 14, -hw - 58, ps, ps + ramp, PAL[15]); seg(-hw - 14, -hw - 58, pe - ramp, pe, PAL[15]);
-    seg(-hw - 20, -hw - 58, ps, pe, PAL[15]);
-    seg(-hw - 14, -hw - 20, ps + ramp, pe - ramp, PAL[12]);
-    seg(-hw - 45, -hw - 46.5, ps + ramp, pe - ramp, PAL[9]);
-    seg(-hw - 58, -hw - 62, ps, pe, PAL[12]);
+    // v1.3 pit road: commitment line before the start/finish, spaced boxes, exit blending back in after turn 1/2
+    const pe2 = ps + geom.pitRange, bA = ps + geom.boxA, bB = ps + geom.boxB, mid0 = ps + geom.boxA * 0.55, mid1 = bB + (pe2 - bB) * 0.45;
+    seg(-hw - 2, -hw - 22, ps, mid0, PAL[15]); seg(-hw - 14, -hw - 58, mid0 - 0.004, mid1 + 0.004, PAL[15]); seg(-hw - 2, -hw - 22, mid1, pe2, PAL[15]);
+    seg(-hw - 14, -hw - 20, mid0, mid1, PAL[12]);
+    seg(-hw - 40, -hw - 41.5, bA, bB, PAL[9]);
+    seg(-hw - 58, -hw - 62, mid0, mid1, PAL[12]);
+    // infield garages behind pit road on ovals with room for them
+    if (!isRoad && Math.min(geom.W, geom.H) - 2 * (hw + 110) > 300) { seg(-hw - 72, -hw - 98, bA, bB, PAL[12]); for (let f = bA; f < bB; f += 14 / geom.L) seg(-hw - 74, -hw - 96, f, f + 6 / geom.L, PAL[11]); }
     // road course curbs (red/white) at turn-ish areas: alternate along all edges
-    if (isRoad) {
+    if (isRoad && !street) {
       for (let i = 0; i < 400; i++) { const f0 = i / 400, f1 = (i + 0.5) / 400; if (geom.inPitZone(f0)) continue; seg(hw - 1, hw + 4, f0, f1, PAL[14]); seg(-hw - 4, -hw + 1, f0, f1, PAL[14]); }
     }
-    // pit stall lines
-    for (let i = 0; i <= 24; i++) { const f = ps + ramp + (geom.pitRange - ramp * 2) * i / 24; seg(-hw - 46, -hw - 58, f, f + 1.2 / geom.L, PAL[9]); }
+    // pit boxes: one per car, evenly spaced
+    for (let i = 0; i <= geom.nBoxes; i++) { const f = bA + (bB - bA) * i / geom.nBoxes; seg(-hw - 42, -hw - 58, f, f + 1.2 / geom.L, PAL[9]); }
+    // commitment line (solid yellow, you must pit once you cross it) and the pit-exit blend line
+    const pre = isRoad ? 0.008 : 0.03; seg(-hw - 1, -hw + 1.5, ps - pre, mid0, PAL[8]); seg(-hw - 22, -hw, ps, ps + 2 / geom.L, PAL[8]); seg(-hw - 1, -hw + 1.5, mid1, pe2 + (isRoad ? 0.006 : 0.02), PAL[8]);
     // start/finish checkers
     const sq = 5; const nSq = Math.ceil(hw * 2 / sq);
     for (let r = 0; r < 2; r++) for (let k = 0; k < nSq; k++) seg(-hw + k * sq, -hw + (k + 1) * sq, r * sq / geom.L, (r + 1) * sq / geom.L, (r + k) % 2 ? PAL[13] : PAL[9]);
@@ -77,10 +83,13 @@ const Renderer = (() => {
     }
     x.putImageData(id, 0, 0);
     // crowd
-    const span = ((pe + 0.03) - (ps - 0.03) + 1) % 1; const stepF = Math.max(1.5, 2.5 / s) / geom.L; const dot = Math.max(1, Math.round(s * 1.6));
-    for (let f = 0; f < span; f += stepF) for (let o = hw + 19; o < hw + 90; o += Math.max(2.5, 2.5 / s)) {
-      if (Math.random() < 0.55) { const p = geom.pos(ps - 0.03 + f, o); x.fillStyle = U.pick(CROWD); x.fillRect(Math.round(p.x * s), Math.round(p.y * s), dot, dot); }
-    }
+    const stepF = Math.max(1.5, 2.5 / s) / geom.L; const dot = Math.max(1, Math.round(s * 1.6));
+    for (const [f0, f1, dep] of stands) { const span = ((f1 - f0) % 1 + 1) % 1 || 1;
+      for (let f = 0; f < span; f += stepF) for (let o = hw + 19; o < hw + 14 + dep; o += Math.max(2.5, 2.5 / s)) {
+        if (Math.random() < 0.55) { const p = geom.pos(f0 + f, o); x.fillStyle = U.pick(CROWD); x.fillRect(Math.round(p.x * s), Math.round(p.y * s), dot, dot); } } }
+    // infield lake (drawn after the palette pass so it stays blue)
+    const lake = DATA.LAKES[geom.id];
+    if (lake) { const p = geom.pos(lake[0], -lake[1]); x.save(); x.translate(p.x * s, p.y * s); x.rotate(p.a); x.fillStyle = '#2f6fb3'; x.beginPath(); x.ellipse(0, 0, 150 * s, 42 * s, 0, 0, Math.PI * 2); x.fill(); x.fillStyle = '#5aa0e0'; x.fillRect(-60 * s, -8 * s, 40 * s, Math.max(1, 2 * s)); x.fillRect(10 * s, 6 * s, 50 * s, Math.max(1, 2 * s)); x.restore(); }
     // infield name
     if (!isRoad) {
       const name = geom.def.short; const tw = PF.measure(name);
@@ -115,7 +124,7 @@ const Renderer = (() => {
     draw(dtReal) {
       const x = this.ctx, g = this.geom, race = this.race; this.t += dtReal || 0;
       x.setTransform(1, 0, 0, 1, 0, 0); x.imageSmoothingEnabled = false;
-      x.fillStyle = '#3f8f2f'; x.fillRect(0, 0, this.bw, this.bh);
+      x.fillStyle = g.def.street ? '#b8b8b8' : '#3f8f2f'; x.fillRect(0, 0, this.bw, this.bh);
       let s, ox, oy, big;
       if (this.mode === 'follow' && this.bgFollow) {
         s = 1; big = true;

@@ -425,3 +425,48 @@ body.pc img.pf, body.pc img.pix, body.pc canvas, body.pc img.art { image-renderi
 }
 /* desktop: trophy shelves wrap onto extra rows instead of hiding trophies off to the side */
 body.pc .shelf { flex-wrap: wrap; overflow-x: visible; row-gap: 8px; }
+/* ---------- v1.3 ---------- */
+.pw-bot .free-btn { flex: 0 0 auto; min-width: 64px; height: 48px; background: #1e3a24; border: 3px solid var(--ink); border-radius: 8px; box-shadow: inset 0 0 0 2px #2e9b3a; cursor: pointer; display: grid; place-items: center; padding: 0 6px; color: #fff; font: inherit; }
+.pw-bot .free-btn:active { transform: translateY(2px); }
+@media (max-height: 370px) { .pw-bot .free-btn { height: 48px; } }
+.road-seg.s4 i { background: linear-gradient(90deg, #ff8a00, #ffd000); } .road-seg.s5 i { background: #29c4b0; } .road-seg.s6 i { background: #11b5e4; }
+.road-seg.s7 i { background: #2f62d8; } .road-seg.s8 i { background: #7a33c4; } .road-seg.s9 i { background: linear-gradient(90deg, #1a2f6b, #e3242f); }
+.fac-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.rnd-tiers { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+.rnd-tiers .btn { min-height: 40px; font-size: 11px; padding: 0 6px; }
+.insp { display: block; padding: 1px 4px; border-radius: 3px; background: #0d0e10; }
+.insp-low { color: #7dff7d; } .insp-medium { color: #ffd000; } .insp-high { color: #ff6b6b; }
+.tbl tr.po-out td { opacity: .7; }
+.tbl tr.po-out td:first-child { box-shadow: inset 4px 0 0 #6b727c; }
+.seatbtns + .seatbtns { margin-top: 4px; }
+.btn.ext-last { box-shadow: inset 0 0 0 2px var(--neon); }
+.path-card .ol1 { font-size: 14px; }
+.path-card .btn { margin-top: 2px; }
+/* free mode */
+.fm-grid { display: grid; grid-template-columns: 190px minmax(0, 1fr) minmax(0, 1.25fr); gap: 8px; align-items: start; }
+.fm-col { display: flex; flex-direction: column; gap: 4px; padding: 8px; min-width: 0; }
+.fm-g { color: var(--neon); margin-top: 3px; }
+.fm-sers { display: flex; flex-wrap: wrap; gap: 4px; }
+.fm-sers .btn { min-height: 36px; min-width: 0; padding: 0 7px; font-size: 11px; flex: 1 1 auto; }
+.fm-all { min-height: 32px; font-size: 11px; padding: 0 6px; }
+.fm-list { display: flex; flex-direction: column; gap: 4px; max-height: 196px; overflow-y: auto; }
+.fm-track { display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 2px 6px; background: var(--pan2); border: 2px solid var(--ink); border-radius: 6px; color: #fff; font: inherit; font-size: 11px; cursor: pointer; text-align: left; }
+.fm-track .nm1 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-track.sel { background: #353b12; box-shadow: inset 0 0 0 2px var(--neon); }
+.fm-team { min-height: 36px; font: inherit; font-size: 11px; color: #fff; text-align: left; width: 100%; }
+.fm-team .grow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fm-go { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 6px 8px; }
+.fm-go .grow { display: flex; align-items: center; gap: 8px; overflow: hidden; }
+.fm-go .nm1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fm-go .btn { flex: 0 0 auto; min-width: 140px; }
+@media (max-width: 760px) { .fm-grid { grid-template-columns: 160px minmax(0, 1fr) minmax(0, 1.2fr); } }
+@media (max-height: 370px) { .fm-list { max-height: 168px; } }
+@media (hover: hover) and (pointer: fine) { .pw-bot .free-btn:hover, .fm-track:hover { filter: brightness(1.12); box-shadow: inset 0 0 0 2px var(--neon), 0 3px 0 rgba(0,0,0,.4); } }
+.lad { white-space: nowrap; }
+.fm-sum { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; min-width: 0; }
+.fm-sum .nm1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.pw-head .fm-race { min-height: 38px; padding: 0 12px; flex: 0 0 auto; }
+.fm-sers .btn { min-height: 32px; flex: 1 1 28%; padding: 0 4px; }
+.fm-col .dp-title { margin-bottom: 0; }
+.txt::placeholder { color: #6b727c; opacity: 1; }
+.fm-sers .btn { flex: 1 1 40%; min-height: 30px; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

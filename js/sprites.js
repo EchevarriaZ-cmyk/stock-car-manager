@@ -4,8 +4,25 @@ const Art = (() => {
   const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d', { willReadFrequently: true }); x.imageSmoothingEnabled = false; return [c, x]; };
   const OUT = '#141414', GLASS = '#1e2a3a', GLASS_HI = '#5d7891';
   const cache = {};
-  // Top-down stock car 32x16, nose pointing right (+x)
+  // number panel helper: 2 digits (3x5 font) on a white panel, rotated 180 when the sprite is flipped
+  function numPanel(x, number, px, py, pw, ph, col, flip) {
+    x.fillStyle = '#f4f4f4'; x.fillRect(px, py, pw, ph);
+    const s = String(number).slice(0, 2); const w = s.length * 4 - 1; col = col === '#f4f4f4' || col === '#f2f2f2' ? '#141414' : col;
+    const ox = Math.floor((pw - w) / 2), oy = Math.floor((ph - 5) / 2);
+    if (!flip) PF.digits3(x, s, px + ox, py + oy, col);
+    else { const t = document.createElement('canvas'); t.width = pw; t.height = ph; const tx = t.getContext('2d'); PF.digits3(tx, s, ox, ph - 5 - oy, col);
+      x.save(); x.translate(px + pw, py + ph); x.rotate(Math.PI); x.drawImage(t, 0, 0); x.restore(); }
+  }
+  // v1.3: every series has its own car. model: kart | arca | truck | oreilly | cup (default) | usf | pro | nxt | indy
   function carBig(lv, number, flip) {
+    const m = lv.model || 'cup';
+    if (m !== 'cup' && !lv.pace) {
+      const key = 'B' + m + lv.body + lv.stripe + lv.num + number + (flip ? 'f' : '');
+      if (cache[key]) return cache[key];
+      const [c, x] = mk(32, 16);
+      if (m === 'kart') drawKart(x, lv, number, flip); else if (m === 'usf' || m === 'pro' || m === 'nxt' || m === 'indy') drawOW(x, lv, number, flip, m); else drawStock(x, lv, number, flip, m);
+      cache[key] = c; return c;
+    }
     const key = 'B' + lv.body + lv.stripe + lv.num + number + (lv.pace ? 'p' : '') + (flip ? 'f' : '');
     if (cache[key]) return cache[key];
     const [c, x] = mk(32, 16);
@@ -41,18 +58,96 @@ const Art = (() => {
     r('#f2e9a0', 29, 4, 1, 2); r('#f2e9a0', 29, 10, 1, 2);
     cache[key] = c; return c;
   }
+  // ARCA (older boxy car, roof number, full-length stripe), Truck (cab + bed), O'Reilly (short roof, split hood stripes)
+  function drawStock(x, lv, number, flip, m) {
+    const r = (col, a, b, w, h) => { x.fillStyle = col; x.fillRect(a, b, w, h); };
+    r(OUT, 5, 0, 6, 2); r(OUT, 22, 0, 6, 2); r(OUT, 5, 14, 6, 2); r(OUT, 22, 14, 6, 2);
+    r(OUT, 2, 1, 28, 14); r(OUT, 1, 2, 30, 12); r(lv.body, 2, 2, 28, 12);
+    r(OUT, 2, 2, 1, 1); r(OUT, 2, 13, 1, 1); r(OUT, 29, 2, 1, 1); r(OUT, 29, 13, 1, 1);
+    r(U.shade(lv.body, -0.25), 3, 12, 26, 1); r(U.shade(lv.body, 0.25), 3, 2, 26, 1);
+    if (m === 'truck') {
+      // bed (rear) with liner and tailgate, cab roof with the number, short hood
+      r(U.shade(lv.body, -0.45), 3, 4, 10, 8); r('#2a2a2a', 4, 5, 8, 6); r(U.shade(lv.body, -0.2), 2, 3, 1, 10); r(lv.stripe, 5, 7, 6, 2);
+      r(OUT, 13, 3, 1, 10); r(GLASS, 14, 3, 1, 10);
+      r(lv.body, 15, 3, 8, 10); numPanel(x, number, 15, 4, 8, 8, lv.num, flip);
+      r(GLASS, 23, 3, 2, 10); r(GLASS_HI, 23, 4, 1, 3);
+      r(lv.stripe, 25, 4, 4, 8); r('#d8d8d8', 29, 3, 1, 10); r('#f2e9a0', 29, 4, 1, 2); r('#f2e9a0', 29, 10, 1, 2);
+      return;
+    }
+    if (m === 'arca') {
+      r(lv.stripe, 2, 7, 28, 2); r('#2a2a2a', 2, 3, 2, 10); r('#5a5a5a', 2, 3, 1, 10);
+      r(GLASS, 7, 4, 3, 8); r(lv.body, 10, 3, 8, 10); numPanel(x, number, 10, 4, 8, 8, lv.num, flip); r(lv.stripe, 10, 7, 0, 0);
+      r(GLASS, 18, 3, 3, 10); r(GLASS_HI, 19, 4, 1, 3); r('#f2e9a0', 29, 3, 1, 3); r('#f2e9a0', 29, 10, 1, 3);
+      return;
+    }
+    // oreilly
+    r(lv.stripe, 22, 4, 7, 2); r(lv.stripe, 22, 10, 7, 2); r(lv.stripe, 2, 5, 3, 6);
+    r('#2a2a2a', 2, 3, 1, 10); r(GLASS, 6, 4, 4, 8); r(GLASS_HI, 7, 5, 1, 2);
+    r(lv.body, 10, 3, 8, 10); numPanel(x, number, 10, 4, 8, 8, lv.num, flip);
+    r(GLASS, 18, 3, 4, 10); r(GLASS_HI, 19, 4, 1, 3); r('#f2e9a0', 29, 4, 1, 2); r('#f2e9a0', 29, 10, 1, 2);
+  }
+  // kart: exposed tyres, side pods, nose fairing with the number, driver in the seat
+  function drawKart(x, lv, number, flip) {
+    const r = (col, a, b, w, h) => { x.fillStyle = col; x.fillRect(a, b, w, h); };
+    r(OUT, 3, 0, 7, 4); r('#2b2b2b', 4, 1, 5, 2); r(OUT, 3, 12, 7, 4); r('#2b2b2b', 4, 13, 5, 2);
+    r(OUT, 21, 1, 5, 3); r('#2b2b2b', 22, 2, 3, 1); r(OUT, 21, 12, 5, 3); r('#2b2b2b', 22, 13, 3, 1);
+    r('#8a8a8a', 6, 4, 18, 1); r('#8a8a8a', 6, 11, 18, 1); r('#8a8a8a', 9, 4, 1, 8); r('#8a8a8a', 20, 4, 1, 8);
+    r(OUT, 11, 3, 10, 2); r(lv.body, 12, 3, 8, 1); r(OUT, 11, 11, 10, 2); r(lv.body, 12, 12, 8, 1);
+    r(OUT, 1, 4, 3, 8); r(lv.stripe, 2, 5, 1, 6);
+    r(OUT, 24, 3, 7, 10); r(lv.body, 25, 4, 5, 8); numPanel(x, number, 24, 5, 7, 6, lv.num, flip);
+    r(OUT, 11, 5, 8, 6); r('#3a3a3a', 12, 6, 6, 4);
+    r(OUT, 13, 5, 6, 6); r(lv.stripe, 14, 6, 4, 4); r(lv.body, 14, 7, 4, 1); r('#1e2a3a', 17, 6, 1, 4); r('#9fd4ff', 17, 7, 1, 1);
+  }
+  // open-wheel ladder: usf (simple junior car), pro (bigger wings), nxt (sidepods), indy (sidepods + aeroscreen)
+  function drawOW(x, lv, number, flip, m) {
+    const r = (col, a, b, w, h) => { x.fillStyle = col; x.fillRect(a, b, w, h); };
+    const big = m === 'nxt' || m === 'indy';
+    r(OUT, 2, 0, 7, 4); r('#2b2b2b', 3, 1, 5, 2); r(OUT, 2, 12, 7, 4); r('#2b2b2b', 3, 13, 5, 2);
+    r(OUT, 22, 1, 5, 3); r('#2b2b2b', 23, 2, 3, 1); r(OUT, 22, 12, 5, 3); r('#2b2b2b', 23, 13, 3, 1);
+    // rear wing
+    r(OUT, 0, m === 'usf' ? 3 : 2, 3, m === 'usf' ? 10 : 12); r(lv.stripe, 1, m === 'usf' ? 4 : 3, 1, m === 'usf' ? 8 : 10);
+    // sidepods / body
+    if (big) { r(OUT, 8, 3, 11, 10); r(lv.body, 9, 4, 9, 8); r(U.shade(lv.body, -0.25), 9, 11, 9, 1); r(lv.stripe, 10, 4, 7, 1); r(lv.stripe, 10, 11, 7, 1); }
+    else { r(OUT, 8, 4, 11, 8); r(lv.body, 9, 5, 9, 6); r(U.shade(lv.body, -0.25), 9, 10, 9, 1); }
+    // engine cover + airbox
+    r(OUT, 3, 6, 6, 4); r(lv.body, 4, 7, 5, 2); r(lv.stripe, 5, 7, 3, 1);
+    // nose
+    r(OUT, 18, 5, 11, 6); r(lv.body, 19, 6, 9, 4);
+    numPanel(x, number, 19, 5, 8, 6, lv.num, flip);
+    // front wing
+    r(OUT, 28, 1, 3, 14); r(lv.stripe, 29, 2, 1, 12); if (m !== 'usf') { r(OUT, 27, 1, 1, 3); r(OUT, 27, 12, 1, 3); }
+    // cockpit + helmet (+ aeroscreen on the IndyCar)
+    r(OUT, 12, 6, 5, 4); r(lv.stripe, 13, 7, 3, 2); r('#1e2a3a', 15, 7, 1, 2);
+    if (m === 'indy') { r(OUT, 17, 5, 2, 6); r(GLASS_HI, 17, 6, 1, 4); }
+  }
   function carSmall(lv) {
-    const key = 'S' + lv.body + lv.stripe + (lv.pace ? 'p' : '');
+    const m = lv.pace ? 'cup' : lv.model || 'cup';
+    const key = 'S' + (m === 'cup' ? '' : m) + lv.body + lv.stripe + (lv.pace ? 'p' : '');
     if (cache[key]) return cache[key];
     const [c, x] = mk(12, 6);
     const r = (col, a, b, w, h) => { x.fillStyle = col; x.fillRect(a, b, w, h); };
+    if (m === 'kart') {
+      r(OUT, 2, 0, 3, 1); r(OUT, 8, 0, 2, 1); r(OUT, 2, 5, 3, 1); r(OUT, 8, 5, 2, 1);
+      r(OUT, 2, 1, 9, 4); r(lv.body, 3, 1, 1, 4); r(lv.body, 9, 2, 1, 2); r('#5a5a5a', 4, 2, 4, 2); r(lv.stripe, 5, 2, 2, 2);
+      cache[key] = c; return c;
+    }
+    if (m === 'usf' || m === 'pro' || m === 'nxt' || m === 'indy') {
+      r(OUT, 1, 0, 3, 1); r(OUT, 8, 0, 2, 1); r(OUT, 1, 5, 3, 1); r(OUT, 8, 5, 2, 1);
+      r(OUT, 0, 1, 1, 4); r(OUT, 11, 0, 1, 6); r(OUT, 2, 1, 9, 4); r(lv.body, 3, m === 'nxt' || m === 'indy' ? 1 : 2, 5, m === 'nxt' || m === 'indy' ? 4 : 2); r(lv.body, 8, 2, 3, 2); r(lv.stripe, 5, 2, 2, 2);
+      cache[key] = c; return c;
+    }
+    if (m === 'truck') {
+      r(OUT, 2, 0, 3, 1); r(OUT, 8, 0, 3, 1); r(OUT, 2, 5, 3, 1); r(OUT, 8, 5, 3, 1);
+      r(OUT, 0, 1, 12, 4); r(lv.body, 1, 1, 10, 4); r('#2a2a2a', 1, 2, 4, 2); r(GLASS, 8, 1, 1, 4); r('#f4f4f4', 6, 2, 2, 2); r(lv.stripe, 10, 2, 1, 2);
+      cache[key] = c; return c;
+    }
     r(OUT, 2, 0, 3, 1); r(OUT, 8, 0, 3, 1); r(OUT, 2, 5, 3, 1); r(OUT, 8, 5, 3, 1);
     r(OUT, 0, 1, 12, 4); r(lv.body, 1, 1, 10, 4);
     r(lv.stripe, 9, 2, 2, 2); r(GLASS, 7, 1, 1, 4); r(GLASS, 2, 1, 1, 4);
     r(lv.pace ? '#d92020' : '#f4f4f4', 4, 2, 2, 2);
     cache[key] = c; return c;
   }
-  function carURL(lv, number) { const k = 'U' + lv.body + lv.stripe + lv.num + number; if (!cache[k]) cache[k] = carBig(lv, number).toDataURL(); return cache[k]; }
+  function carURL(lv, number) { const k = 'U' + (lv.model || '') + lv.body + lv.stripe + lv.num + number; if (!cache[k]) cache[k] = carBig(lv, number).toDataURL(); return cache[k]; }
   function carImg(lv, number, scale, rot) {
     scale = scale || 3;
     return `<img class="pix car-img" src="${carURL(lv, number)}" style="width:${32 * scale}px;height:${16 * scale}px;${rot ? 'transform:rotate(' + rot + 'deg)' : ''}" alt="#${number}">`;
