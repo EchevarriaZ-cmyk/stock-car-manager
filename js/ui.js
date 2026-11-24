@@ -77,7 +77,7 @@ const UI = (() => {
       A.push(['[RESULTS]', DATA.TRACKS[r.track].short + ': #' + w.number + ' ' + w.driver.toUpperCase() + ' WINS. ' + s.team.name + ': ' + mine + '.']);
       const ord = Game.standingsOrder(); const lead = s.standings[ord[0]].pts; const myId = Game.teamCars()[0].id; const me = s.standings[myId];
       A.push(['[STANDINGS]', s.team.name + ' IS ' + U.ordinal(Game.teamBestPos()) + ' IN POINTS' + (me && ord[0] !== myId ? ', ' + (lead - me.pts) + ' BEHIND THE LEADER.' : ' - LEADING THE SERIES!')]);
-    } else A.push(['[SEASON]', s.year + ' ' + sr.name + ' - 10 RACES' + (sr.ow || sr.kart ? '' : ', 3 STAGES EACH') + '. NO POINTS ON THE BOARD YET.']);
+    } else A.push(['[SEASON]', s.year + ' ' + sr.name + ' - ' + Game.nRaces() + ' RACES' + (sr.ow || sr.kart ? '' : ', 3 STAGES EACH') + '. NO POINTS ON THE BOARD YET.']);
     if (Game.isKart()) A.push(['[KARTING]', 'AFTER THIS KART SEASON YOU PICK YOUR PATH: NASCAR OR THE ROAD TO INDYCAR.']);
     if (s.playoff && Game.playoffRoundName()) A.push(['[PLAYOFFS]', sr.short + ' ' + Game.playoffRoundName() + ': ' + Game.teamCars().map(c => '#' + c.number + ' ' + ({ alive: 'ALIVE', final4: 'IN THE FINAL 4', out: 'ELIMINATED', missed: 'MISSED THE CUT', champ: 'CHAMPION' })[Game.playoffStatus(c.id)]).join(', ') + '.']);
     if (s.hired) A.push(['[BOSS]', s.hired.owner + ' CONFIDENCE: ' + Math.round(s.hired.confidence) + '%.']);
@@ -145,7 +145,7 @@ const UI = (() => {
     let info = '';
     if (has) {
       const sr = Game.ser(); const pos = s.results.length ? U.ordinal(Game.teamBestPos()) + ' IN PTS' : 'NO PTS YET';
-      info = `${T(sr.short, sr.short.length > 7 ? 2 : 2, SH)}<span>SEASON ${s.year}</span><span>${s.seasonOver ? 'SEASON DONE' : 'RACE ' + s.week + '/10'}</span><span>${pos}</span><span class="neon">${s.mode === 'owner' ? 'OWNER' : 'BOSS ' + Math.round(s.hired.confidence) + '%'}</span>`;
+      info = `${T(sr.short, sr.short.length > 7 ? 2 : 2, SH)}<span>SEASON ${s.year}</span><span>${s.seasonOver ? 'SEASON DONE' : 'RACE ' + s.week + '/' + Game.nRaces()}</span><span>${pos}</span><span class="neon">${s.mode === 'owner' ? 'OWNER' : 'BOSS ' + Math.round(s.hired.confidence) + '%'}</span>`;
     } else info = `${T('NEW', 2, { color: NEON, shadow: '#0d0e10' })}<span>START IN KARTS</span><span>OWN OR GET HIRED</span><span class="neon">${VIEW.desktop ? 'CLICK TO START' : 'TAP TO START'}</span>`;
     tiles += `<button class="ptile career-tile" style="grid-area:2 / 1 / 3 / 5" data-act="go" data-arg="career"${has ? '' : KB('enter space', 'ENTER')}>
       <span class="ct-top"><span class="ct-art" style="width:${artW}px"><img class="art" src="${artURL('career', Math.round(artW / 1.45), Math.round(artH / 1.45), { livery: lv, number: num })}" alt="">${lab(has ? 'CAREER\nMODE' : 'NEW\nCAREER', artW)}</span><span class="ct-info">${info}</span></span>
@@ -161,6 +161,7 @@ const UI = (() => {
       <div class="botbar pw-bot"><button class="profile-btn" data-act="go" data-arg="profile" aria-label="Profile">${T(pname, pname.length > 8 ? 2 : 3, SH)}<span class="pb-lv">LV ${has ? s.level : 1}<span class="xpbar"><i style="width:${xpPct}%"></i></span></span></button>
         <button class="ticker" data-act="go" data-arg="${has ? 'news' : 'career'}" aria-label="News ticker">${tickerHTML()}</button>
         <button class="free-btn" data-act="go" data-arg="free" aria-label="Free Mode"${KB('q', 'Q')}>${T('FREE\nMODE', 2, SH)}</button>
+        <button class="set-btn" data-act="go" data-arg="settings" aria-label="Settings"${KB('s', 'S')}>${PW.icon('gear', 2)}</button>
         <button class="ver-btn" data-act="go" data-arg="updates" aria-label="Update log">${T('V' + DATA.VERSION, 2, SH)}${seenVersion() !== DATA.VERSION ? '<span class="newdot">NEW</span>' : ''}</button></div></div>`);
   }
 
@@ -176,25 +177,25 @@ const UI = (() => {
     let body = '';
     const pos = s.results.length ? Game.teamBestPos() : null;
     const wins = Game.teamCars().reduce((a, c) => a + (s.standings[c.id] ? s.standings[c.id].wins : 0), 0);
-    const sr = Game.ser(); const F = s.poFmt === 2 ? DATA.FORMATS[sr.id] : null;
+    const sr = Game.ser(); const F = Game.fmt(); const N = Game.nRaces();
     if (Game.isKart() && s.mode === 'owner') {
       body = `<div class="pt-head">OWNER · REGIONAL KART SERIES</div>
-        ${ck(s.results.length >= 10 || s.seasonOver, 'FINISH THE 10-RACE KART SEASON (' + s.results.length + '/10)')}
+        ${ck(s.results.length >= N || s.seasonOver, 'FINISH THE ' + N + '-RACE KART SEASON (' + s.results.length + '/' + N + ')')}
         ${ck(pos !== null && pos <= 3, 'TOP 3 = BIGGER BACKERS FOR THE STEP UP (NOW ' + (pos ? U.ordinal(pos) : '--') + ')')}
         <div class="ck"><b>&rsaquo;</b>THEN PICK: NASCAR (ARCA) OR ROAD TO INDY (USF JR)</div>`;
     } else if (s.mode === 'owner') {
       const nt = Game.nextTier();
       if (nt !== null) {
-        const nx = DATA.SERIES[nt]; const pp = sr.promoPos || 5, pw = sr.promoWins || 2;
+        const nx = DATA.SERIES[nt]; const pr = Game.promoRule(); const pp = pr.pos, pw = pr.wins; const buy = Game.buyInFor(nt);
         body = `<div class="pt-head">OWNER · TO MOVE UP TO ${nx.short}:</div>
           ${ck(pos !== null && (pos <= pp) || wins >= pw, 'TOP ' + pp + ' IN PTS (NOW ' + (pos ? U.ordinal(pos) : '--') + ') OR ' + pw + ' WINS (' + wins + ')')}
-          ${ck(s.money >= nx.buyIn, (nx.buyIn ? U.moneyShort(nx.buyIn) + ' BUY-IN' : 'NO BUY-IN') + ' (BANK ' + U.moneyShort(s.money) + ', HALF IF CHAMP)')}`;
+          ${ck(s.money >= buy, (buy ? U.moneyShort(buy) + ' BUY-IN' : 'NO BUY-IN') + ' (BANK ' + U.moneyShort(s.money) + ', HALF IF CHAMP)')}`;
       } else if (F && F.cuts) {
         const st = Game.teamCars().map(c => Game.playoffStatus(c.id)); const inP = st.some(x => x && x !== 'missed'); const in4 = st.some(x => x === 'final4' || x === 'champ');
         const c0 = F.cuts[0], cl = F.cuts[F.cuts.length - 1];
         body = `<div class="pt-head">OWNER: YOU MADE THE ${sr.short} SERIES${s.playoff ? ' · ' + Game.playoffRoundName() : ''}</div>${ck(inP, 'TOP ' + c0[1] + ' AFTER R' + c0[0] + ' MAKE THE PLAYOFFS (' + F.cuts.map(c => c[1]).join(' > ') + ')')}${ck(in4, 'CHAMPIONSHIP 4 AFTER R' + cl[0] + ' - WIN THE FINALE!')}`;
       } else if (Game.isTop()) {
-        body = `<div class="pt-head">OWNER: YOU MADE THE ${sr.short} SERIES</div>${ck(pos === 1, 'LEAD THE POINTS AFTER 10 RACES (NOW ' + (pos ? U.ordinal(pos) : '--') + ')')}${ck(s.seriesIdx === 9 && s.week > 5, s.seriesIdx === 9 ? 'THE INDY 500 IS RACE 5 · THE FINALE PAYS DOUBLE' : 'FULL-SEASON POINTS')}`;
+        body = `<div class="pt-head">OWNER: YOU MADE THE ${sr.short} SERIES</div>${ck(pos === 1, 'LEAD THE POINTS AFTER ' + N + ' RACES (NOW ' + (pos ? U.ordinal(pos) : '--') + ')')}${ck(s.seriesIdx === 9 && s.week > s.schedule.indexOf('indianapolis') + 1, s.seriesIdx === 9 ? (s.schedule.includes('indianapolis') ? 'THE INDY 500 IS RACE ' + (s.schedule.indexOf('indianapolis') + 1) + ' · ' : '') + 'THE FINALE PAYS DOUBLE' : 'FULL-SEASON POINTS')}`;
       } else if (s.seriesIdx === 3) {
         const inP = s.playoff && Game.teamCars().some(c => s.playoff.ids.includes(c.id)); const in4 = s.playoff && s.playoff.final4 && Game.teamCars().some(c => s.playoff.final4.includes(c.id));
         body = `<div class="pt-head">OWNER: YOU MADE THE CUP SERIES</div>${ck(inP, 'TOP 8 AFTER RACE 7 MAKE THE PLAYOFFS')}${ck(in4, 'CHAMPIONSHIP 4 AFTER RACE 9 - WIN THE FINALE!')}`;
@@ -223,7 +224,8 @@ const UI = (() => {
       <div class="dd-stats">${dashStatBar('speed', 'SPEED', d ? d.speed : 0, NEON)}${dashStatBar('flag', 'RACECRAFT', d ? d.craft : 0, '#ff3b47')}${dashStatBar('tire', 'TIRES', d ? d.tires : 0, '#2ecc40')}</div></div>`;
     // center: calendar strip + next race + career path
     const cell = Math.max(18, Math.floor((cw - 16 - 9 * 3) / 10)); const ih = Math.round(cell * 0.62);
-    const cells = s.schedule.map((tid, i) => {
+    const N = Game.nRaces(); const w0 = N <= 10 ? 0 : U.clamp(s.week - 4, 0, N - 10);
+    const cells = s.schedule.slice(w0, w0 + 10).map((tid, j) => { const i = j + w0;
       const res = s.results[i]; const mine = res ? res.order.filter(o => o.id === 'P' || o.id === 'P2').map(o => o.pos) : [];
       const next = !s.seasonOver && i === s.week - 1; const col = next ? NEON : res ? '#8b929c' : '#d8dde3';
       return `<span class="cal-cell ${next ? 'next' : ''} ${res ? 'past' : ''}" style="width:${cell}px"><img class="pix" src="${PW.trackIcon(tid, cell - 4, ih, col, cell >= 30 ? 2 : 1)}" style="width:${cell - 4}px;height:${ih}px" alt="${DATA.TRACKS[tid].short}"><span class="cc-l">${res ? 'P' + Math.min(...mine) : next ? 'NEXT' : 'R' + (i + 1)}</span></span>`;
@@ -231,13 +233,13 @@ const UI = (() => {
     let nextHTML;
     if (s.seasonOver) nextHTML = `<button class="panel dash-next" data-act="go" data-arg="seasonEnd"><span class="dn-k">SEASON COMPLETE</span>${T(U.ordinal(Game.teamBestPos()) + ' IN POINTS', 2, SH)}<span class="dn-s">${TAP()} FOR THE WRAP-UP</span></button>`;
     else {
-      const t = DATA.TRACKS[s.schedule[s.week - 1]]; const ty = DATA.raceT(s.schedule[s.week - 1], s.seriesIdx); const racesLeft = 10 - s.week + 1; const ev = DATA.eventName(s.seriesIdx, s.week);
-      const F = s.poFmt === 2 ? DATA.FORMATS[Game.ser().id] : null; const cutNext = F && F.cuts ? F.cuts.find(c => c[0] >= s.week) : null;
+      const t = DATA.TRACKS[s.schedule[s.week - 1]]; const ty = DATA.raceT(s.schedule[s.week - 1], s.seriesIdx); const racesLeft = N - s.week + 1; const ev = DATA.eventName(s.seriesIdx, s.week);
+      const F = Game.fmt(); const cutNext = F && F.cuts ? F.cuts.find(c => c[0] >= s.week) : null;
       const poNote = cutNext ? ' · ' + (s.playoff ? Game.playoffRoundName() + ', ' : '') + (cutNext[1] === 4 ? 'FINAL 4 SET' : (s.playoff ? 'CUT TO ' : 'PLAYOFF CUT ') + cutNext[1]) + ' AFTER R' + cutNext[0] : (F && F.double && F.double.includes(s.week) ? ' · DOUBLE POINTS!' : s.poFmt !== 2 && s.seriesIdx === 3 && s.week <= 7 ? ' · PLAYOFF CUT AFTER R7' : '');
       const room = cw - 24 - 62; const nm = PF.measure(t.name) * 2 <= room ? t.name : t.short; const sc = PF.measure(nm) * 3 <= room && !small ? 3 : 2;
-      nextHTML = `<button class="panel dash-next" data-act="go" data-arg="prep"><span class="dn-row"><span class="dn-k">NEXT:</span>${T(nm, sc, SH)}</span><span class="dn-s">${ev ? '<span class="neon">THE ' + ev + '</span> · ' : ''}${t.note}${t.bank ? ' · ' + DATA.bankWord(t.bank) : ''} · ${ty.laps} LAPS</span><span class="dn-s neon">RACE ${s.week} OF 10 · ${racesLeft} RACE${racesLeft > 1 ? 'S' : ''} LEFT${poNote}</span></button>`;
+      nextHTML = `<button class="panel dash-next" data-act="go" data-arg="prep"><span class="dn-row"><span class="dn-k">NEXT:</span>${T(nm, sc, SH)}</span><span class="dn-s">${ev ? '<span class="neon">THE ' + ev + '</span> · ' : ''}${t.note}${t.bank ? ' · ' + DATA.bankWord(t.bank) : ''} · ${ty.laps} LAPS</span><span class="dn-s neon">RACE ${s.week} OF ${N} · ${racesLeft} RACE${racesLeft > 1 ? 'S' : ''} LEFT${poNote}</span></button>`;
     }
-    const mid = `<div class="dash-mid"><button class="panel dash-cal" data-act="go" data-arg="calendar"><span class="dp-title">SEASON CALENDAR · ${s.year} ${Game.ser().short}</span><span class="cal-strip">${cells}</span></button>${nextHTML}${careerPathHTML(s)}</div>`;
+    const mid = `<div class="dash-mid"><button class="panel dash-cal" data-act="go" data-arg="calendar"><span class="dp-title">SEASON CALENDAR · ${s.year} ${Game.ser().short}${N > 10 ? ' · R' + (w0 + 1) + '-' + (w0 + 10) + ' OF ' + N : ''}</span><span class="cal-strip">${cells}</span></button>${nextHTML}${careerPathHTML(s)}</div>`;
     // right: mini standings + sponsor slot
     const ord = Game.standingsOrder(); const mineIds = Game.teamCars().map(c => c.id);
     const srow = (id) => { const e = Game.entryInfo(id); const i = ord.indexOf(id); return `<div class="ms-row ${e.isPlayer ? (id === 'P2' ? 'me me2' : 'me') : ''}"><b class="ms-p ${i < 3 ? 'top' + (i + 1) : ''}">${i + 1}.</b><span class="sw" style="background:${e.livery.body}"></span><span class="ms-n">${U.esc(e.team)}</span>${e.isPlayer && two ? `<span class="ms-num">#${e.number}</span>` : ''}</div>`; };
@@ -294,16 +296,17 @@ const UI = (() => {
   // ---------- NEW CAREER (v1.2 restyle) ----------
   function newCareerScreen() {
     ui.screen = 'career';
-    if (!ui.nc) ui.nc = { step: 'mode', profile: '', team: '', number: 7, body: '#d9342b', stripe: '#f2d22e', paint: 'body', jobs: null };
+    if (!ui.nc) ui.nc = { step: 'mode', profile: '', team: '', number: 7, body: '#d9342b', stripe: '#f2d22e', paint: 'body', jobs: null, len: 10 };
     const nc = ui.nc; if (!nc.paint) nc.paint = 'body';
     const H = VIEW.h; const lvNC = { body: nc.body, stripe: nc.stripe, num: '#141414' };
     if (nc.step === 'mode') {
-      const ah = Math.max(96, Math.min(150, H - 250));
+      const ah = Math.max(80, Math.min(150, H - 290));
       const card = (mode, kind, label, color, sub, pts) => `<button class="pick-card ${color}" data-act="ncMode" data-arg="${mode}">
         <span class="pc-art" style="height:${ah}px"><img class="art" src="${artURL(kind, Math.round(360 / (NEW_ART[kind] ? 2 : 1.45)), Math.round(ah / (NEW_ART[kind] ? 2 : 1.45)), { livery: lvNC, number: nc.number })}" alt=""><span class="tlabel">${T(label, 3, SH)}</span></span>
         <span class="pc-sub">${sub}</span><span class="pc-pts">${pts.map(p => `<span>&#9656; ${p}</span>`).join('')}</span><span class="pc-go">${T('CHOOSE >', 2, SH)}</span></button>`;
       return render(page('NEW CAREER', `<div class="pick-row">${card('owner', 'garageHub', 'TEAM OWNER', 'red', 'GRASSROOTS · YOUR MONEY, YOUR TEAM', ['$6K AND A KART TRAILER', 'A REGIONAL KART SEASON', 'THEN PICK: NASCAR OR INDYCAR', 'BUY YOUR WAY UP THE LADDER'])}
-        ${card('hired', 'career', 'HIRED MANAGER', 'blue', 'RUN SOMEONE ELSE\'S TEAM', ['A LOCAL KART TEAM HIRES YOU', 'THEN NASCAR OR INDYCAR TEAMS CALL', 'HIT TARGETS - BIG TEAMS CALL', 'MISS THEM AND YOU\'RE FIRED'])}</div>`));
+        ${card('hired', 'career', 'HIRED MANAGER', 'blue', 'RUN SOMEONE ELSE\'S TEAM', ['A LOCAL KART TEAM HIRES YOU', 'THEN NASCAR OR INDYCAR TEAMS CALL', 'HIT TARGETS - BIG TEAMS CALL', 'MISS THEM AND YOU\'RE FIRED'])}</div>
+        <div class="panel nc-len"><span class="dp-title">SEASON LENGTH (RACES PER SEASON · CHANGE IT BETWEEN SEASONS)</span>${lenPicker(nc.len, 'ncLen')}</div>`));
     }
     if (nc.step === 'owner') {
       const sw = DATA.BODY_COLORS.map(c => `<button class="swatch ${nc[nc.paint] === c ? 'sel' : ''}" style="background:${c}" data-act="ncColor" data-arg="${nc.paint}|${c}" aria-label="${c}"></button>`).join('');
@@ -548,8 +551,8 @@ const UI = (() => {
         <img class="pix" src="${previewURL(tid, 140, 84)}" style="width:128px;height:76px;margin:6px 0;border:2px solid #1b1b1b" alt="">
         <div class="small ol1">${t.short}</div>${DATA.eventName(s.seriesIdx, i + 1) ? `<div class="tiny neon">${DATA.eventName(s.seriesIdx, i + 1)}</div>` : ''}<div class="tiny">${t.miles} MI · ${t.kart ? 'KART TRACK' : t.street ? 'STREETS' : DATA.bankWord(t.bank)}</div><div class="tiny">${DATA.raceT(tid, s.seriesIdx).name} · ${DATA.raceT(tid, s.seriesIdx).laps} LAPS</div><div class="tiny">${t.city.toUpperCase()}</div></div>`;
     }).join('');
-    const sr = Game.ser(); const fmt = s.poFmt === 2 ? DATA.formatText(s.seriesIdx) : s.seriesIdx === 3 ? 'TOP 8 MAKE THE PLAYOFFS AFTER RACE 7; CHAMPIONSHIP 4 AFTER RACE 9.' : '';
-    render(page('CALENDAR', `<div class="small ol" style="margin-bottom:6px">${s.year} ${sr.name} - 10 RACES${sr.ow || sr.kart ? '' : ', 3 STAGES EACH (STAGE TOP 10 SCORE 10-1)'}${sr.ow ? ', INDYCAR-STYLE POINTS (+1 POLE, +1 LED A LAP, +2 MOST LAPS LED)' : ''}. ${fmt}</div><div class="hscroll">${cards}</div>`));
+    const sr = Game.ser(); const fmt = s.poFmt === 2 ? DATA.formatText(s.seriesIdx, Game.nRaces()) : s.seriesIdx === 3 ? 'TOP 8 MAKE THE PLAYOFFS AFTER RACE 7; CHAMPIONSHIP 4 AFTER RACE 9.' : '';
+    render(page('CALENDAR', `<div class="small ol" style="margin-bottom:6px">${s.year} ${sr.name} - ${Game.nRaces()} RACES${sr.ow || sr.kart ? '' : ', 3 STAGES EACH (STAGE TOP 10 SCORE 10-1)'}${sr.ow ? ', INDYCAR-STYLE POINTS (+1 POLE, +1 LED A LAP, +2 MOST LAPS LED)' : ''}. ${fmt}</div><div class="hscroll">${cards}</div>`));
   }
   // ---------- STANDINGS ----------
   function standings() {
@@ -663,13 +666,32 @@ const UI = (() => {
       <ul class="clog">${items.map(t => `<li class="small">${U.esc(t)}</li>`).join('')}</ul>
       <div class="row" style="justify-content:flex-end"><button class="btn blue" data-act="go" data-arg="updates">FULL LOG</button><button class="btn green" data-act="seenClose"${KB('enter space escape', 'ENTER')}>LET'S RACE</button></div>`);
   }
+  // ---------- v1.4 SETTINGS ----------
+  // season length buttons: 6 / 10 / 16 / FULL (the real number of races for that series)
+  function lenPicker(cur, act, si) {
+    return `<div class="seg c4 len-pick">${DATA.SEASON_LENS.map(l => `<button class="btn ${cur === l ? 'yellow sel' : 'dark'}" data-act="${act}" data-arg="${l}">${l ? l : 'FULL'}${!l && si !== undefined ? '<small>' + DATA.FULL_CAL[si].length + '</small>' : !l ? '<small>REAL</small>' : '<small>RACES</small>'}</button>`).join('')}</div>`;
+  }
+  function settings() {
+    ui.screen = 'settings'; const s = S(); const real = s && !s.free && !s.demo;
+    const ex = (m) => { const t = DATA.applyLen(Object.assign({}, DATA.trackT('charlotte')), m); return t.laps; };
+    const rl = SETTINGS.RACE_LENS.map(r => `<button class="btn ${SETTINGS.raceLen === r.id ? 'green sel' : 'dark'}" data-act="raceLen" data-arg="${r.id}">${r.name}<small>${ex(r.mult)} LAPS</small></button>`).join('');
+    const cur = SETTINGS.RACE_LENS.find(r => r.id === SETTINGS.raceLen);
+    const seasonPanel = real ? `<div class="panel"><h3>SEASON LENGTH</h3><div class="small" style="line-height:1.5;margin-bottom:6px">THIS SEASON: ${Game.nRaces()} RACES. A CHANGE STARTS NEXT SEASON, WITH REAL TRACKS IN THE REAL ORDER. PLAYOFFS AND MOVE-UP RULES SCALE WITH IT.</div>${lenPicker(Game.seasonLen(), 'seasonLen', s.seriesIdx)}</div>`
+      : `<div class="panel"><h3>SEASON LENGTH</h3><div class="small" style="line-height:1.5">YOU PICK IT WHEN YOU START A CAREER (6, 10, 16 OR THE FULL REAL SEASON). YOU CAN CHANGE IT HERE BETWEEN SEASONS.</div></div>`;
+    render(page('SETTINGS', `<div class="cols"><div class="col">
+      <div class="panel"><h3>RACE LENGTH</h3><div class="small" style="line-height:1.5;margin-bottom:6px">${cur.desc}. CAREER AND FREE MODE. STARTS WITH YOUR NEXT RACE. (LAPS SHOWN FOR CHARLOTTE.)</div><div class="seg c4 len-pick">${rl}</div></div>
+      ${seasonPanel}</div><div class="col">
+      <div class="panel"><h3>TUTORIAL</h3><div class="small" style="line-height:1.5;margin-bottom:6px">A 1-MINUTE TOUR WITH A PRACTICE TEAM. YOUR SAVE IS NOT TOUCHED.</div><button class="btn orange wide" style="min-height:48px" data-act="tutStart"${KB('t', 'T')}>${T('PLAY THE TUTORIAL', 2)}</button></div>
+      <button class="btn blue wide" style="min-height:48px" data-act="go" data-arg="profile">PROFILE & SAVE</button>
+      <button class="btn dark wide" style="min-height:48px" data-act="go" data-arg="updates">UPDATE LOG · V${DATA.VERSION}</button></div></div>`));
+  }
   // ---------- PROFILE / SAVE ----------
   function profile() {
     ui.screen = 'profile'; const s = S();
     render(page('PROFILE & SAVE', `<div class="cols"><div class="col">
       ${s ? `<div class="panel"><div class="small">MANAGER NAME</div><div class="row"><input id="pf-name" class="txt" style="flex:1" maxlength="14" value="${U.esc(s.profile)}"><button class="btn green" data-act="rename">SAVE</button></div>
         <div class="small" style="margin-top:8px">LEVEL ${s.level} · XP ${s.xp}/${s.level * DATA.XP_PER_LEVEL} · REP ${Math.round(s.rep)}</div></div>` : ''}
-      <button class="btn blue wide" data-act="go" data-arg="updates">UPDATE LOG · V${DATA.VERSION}</button>
+      <div class="row" style="flex-wrap:nowrap"><button class="btn blue" style="flex:1;min-height:48px" data-act="go" data-arg="updates">UPDATE LOG · V${DATA.VERSION}</button><button class="btn orange" style="flex:1;min-height:48px" data-act="go" data-arg="settings">SETTINGS</button><button class="btn dark" style="flex:1;min-height:48px" data-act="tutStart">TUTORIAL</button></div>
       ${VIEW.desktop ? '<div class="panel"><h3>MOUSE & KEYBOARD</h3><div class="small" style="line-height:1.55">CLICK ANYTHING YOU WOULD TAP. MOUSE WHEEL SCROLLS LISTS AND SIDEWAYS CARD ROWS. ESC = BACK / CLOSE. ENTER OR SPACE = GO RACE / CONFIRM. RACE DAY: 1 PUSH · 2 NORMAL · 3 SAVE · 4 OR P PIT NOW · UP/DOWN ARROWS CHANGE PACE · T OR LEFT/RIGHT SWITCH CAR · C CAMERA · F SPEED. PIT MENUS: 1-4 PICK, ENTER = CREW CHIEF CALL.</div></div>' : ''}
       <div class="panel"><h3>HOW TO PLAY</h3><div class="small" style="line-height:1.55">YOU ARE THE TEAM BOSS, NOT THE DRIVER. HIRE A DRIVER, SIGN SPONSORS (MONEY EVERY RACE), DEVELOP ENGINE / AERO / CHASSIS IN THE GARAGE, AND UPGRADE FACILITIES. ON RACE DAY YOU PICK A PRACTICE SETUP, THEN MAKE PIT-WALL CALLS: PUSH / NORMAL / SAVE, AND UNDER CAUTION: 4 TIRES, 2 TIRES, FUEL ONLY OR STAY OUT. THE GAME SAVES AUTOMATICALLY.</div></div>
       </div><div class="col">
@@ -715,99 +737,203 @@ const UI = (() => {
           <div class="panel" style="padding:6px"><div class="small" style="margin-bottom:4px">STARTING GRID</div>${rows}</div></div></div>`));
     }
   }
-  // ---------- RACE ----------
+  // ---------- RACE (v1.4: full-screen track + TV broadcast overlays + a pro pit wall) ----------
+  // The track canvas fills the whole race screen; the camera fits the track into the space between the slim overlays:
+  // a top bar (flag, lap, stage, camera/speed/skip), a collapsible leaderboard on the left, the pit-wall strip on the right.
+  // game seconds -> "TV" seconds: a lap takes about as long as the real one, so gaps, lap and stop times read right
+  const MPH = { superspeedway: 185, intermediate: 172, short: 118, road: 96 };
+  function tvFactor(race) { const d = race.geom.def; const mph = d.kart ? 48 : (MPH[race.type] || 150) * (race.T.name === 'STREET COURSE' ? 0.92 : 1); return (d.miles * 3600 / mph) / race.lapTime; }
+  const tvs = (sec) => (sec < 60 ? sec.toFixed(1) : Math.floor(sec / 60) + ':' + (sec % 60).toFixed(1).padStart(4, '0'));
+  function raceLayout() { // overlay sizes in CSS px
+    const R = ui.race; const small = VIEW.h <= 370; const top = small ? 28 : 32;
+    return { top, board: R && R.collapsed ? 50 : (VIEW.w < 800 ? 132 : 138), strip: VIEW.w < 800 ? 104 : 108, bottom: 24 };
+  }
+  function placeOverlays() {
+    const R = ui.race; if (!R) return; const L = raceLayout(); const m = $('.race-main.full'); if (!m) return;
+    m.style.setProperty('--top', L.top + 'px'); m.style.setProperty('--board', L.board + 'px'); m.style.setProperty('--strip', L.strip + 'px');
+    const b = $('#board'); if (b) b.classList.toggle('collapsed', !!R.collapsed);
+    if (R.view) R.view.setInsets(L.board + 10, L.strip + 10, L.top + 4, L.bottom + 4);
+  }
   function startRace() {
     const s = S(); const P = ui.prep; s.day = 7; Game.save();
     const tid = s.schedule[s.week - 1]; const geom = new TrackGeom(tid, s.seriesIdx); geom.event = DATA.eventName(s.seriesIdx, s.week);
-    const R = { speed: 1, stopped: false, processed: false, lastTower: 0, card: false, sel: 'P', ticker: { text: '', kind: 'info', t: 0 } };
+    const R = { speed: 1, stopped: false, processed: false, lastTower: 0, card: false, sel: 'P', ticker: { text: '', kind: 'info', t: 0 }, page: 0, pageT: 0, snap: {}, snapLap: -1,
+      hold: 1.7, fx: {}, adj: false, lastFast: null, battleT: -99, white: false, menu: null, collapsed: !!ui.boardCollapsed };
     ui.race = R; ui.screen = 'race';
     const ids = P.grid.filter(e => e.isPlayer).sort((a, b) => (a.slot || 1) - (b.slot || 1)).map(e => e.id);
     R.race = new RaceSim.Race({ geom, grid: P.grid, playerIds: ids, style: P.style, mode: P.mode, autoPlayer: !P.ask, onEvent: (t, d) => raceEvent(t, d) });
-    render(`<div class="screen race"><div class="race-tower"><div class="tw-head" id="tw-head"></div><div class="tw-list" id="tw-list"></div></div>
-      <div class="race-main"><canvas id="rc"></canvas><div class="race-banner green ol1" id="banner">GREEN FLAG</div><div class="race-ticker ol1" id="ticker"></div><div id="pitcard"></div></div>
-      <div class="race-side" id="side"></div></div>`);
+    R.F = tvFactor(R.race); R.FS = 11.5 / (RaceSim.PIT_TIME.four * R.race.lapTime); // pit stops: 4 tires ~11.5 TV seconds with an average crew
+    render(`<div class="screen race rx2"><div class="race-main full"><canvas id="rc"></canvas>
+      <div class="tv-top" id="tvtop"></div><div class="cban" id="cban"></div>
+      <div class="tv-board" id="board"><button class="tvb-head" id="tw-head" data-act="towerMode" aria-label="Show or hide the leaderboard"${KB('l', 'L')}></button><div class="tw-list" id="tw-list"></div></div>
+      <div class="fx" id="fx"></div><div class="lthird" id="lt"></div><div class="pitclock" id="pitclock"></div>
+      <div class="race-ticker ol1" id="ticker"></div><div class="race-side pw3" id="side"></div><div id="pitcard"></div><div class="race-banner" id="banner" hidden></div></div></div>`);
     R.view = new Renderer.RaceView($('#rc'), R.race); R.view.followId = R.sel;
-    renderSide(); updateTower(); raceEvent('msg', R.race.log[R.race.log.length - 1]);
+    placeOverlays(); renderTop(); renderSide(); updateTower(); raceEvent('msg', R.race.log[R.race.log.length - 1]);
+    // start graphic: grid info + the light sequence, then the green flag
+    const me = R.race.player('P'); const startP = me ? R.race.positionOf(me) : 0;
+    fxShow('start', `<div class="sg-card"><div class="sg-top">${geom.event ? 'THE ' + U.esc(geom.event) : U.esc(geom.def.city.toUpperCase())}</div>${T(geom.def.short, 3, SH)}<div class="sg-sub">${R.race.laps} LAPS · ${P.grid.length} CARS · YOU START P${startP}</div><div class="sg-lights"><i></i><i></i><i></i><i></i><i></i></div></div>`, 1700);
     R.last = performance.now();
     const loop = (ts) => {
       if (R.stopped) return;
       const dt = Math.min(0.05, Math.max(0, (ts - R.last) / 1000)); R.last = ts;
       const race = R.race;
-      if (!race.paused && race.phase !== 'done') { let st = dt * R.speed; while (st > 1e-6) { const k = Math.min(1 / 30, st); race.step(k); st -= k; if (race.paused || race.phase === 'done') break; } }
+      if (R.hold > 0) { R.hold -= dt; if (R.hold <= 0) splash('GREEN FLAG', 'green', 'LAP 1 OF ' + race.laps); }
+      else if (!race.paused && !R.tutPause && race.phase !== 'done') { let st = dt * R.speed; while (st > 1e-6) { const k = Math.min(1 / 30, st); race.step(k); st -= k; if (race.paused || race.phase === 'done') break; } }
       try { R.view.draw(dt); } catch (e) { console.error(e); }
+      pitClock();
       R.lastTower += dt; if (R.lastTower > 0.25) { R.lastTower = 0; updateTower(); updateSide(); }
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
   }
-  function raceEvent(type, d) {
-    const R = ui.race; if (!R) return;
-    if (type === 'msg') { const el = $('#ticker'); if (el && d) { el.textContent = d.text; el.className = 'race-ticker ol1 ' + (['player', 'bad', 'yellow'].includes(d.kind) ? d.kind : ''); } }
-    if (type === 'caution') setBanner('CAUTION', 'yellow');
-    if (type === 'green') setBanner('GREEN FLAG', 'green');
-    if (type === 'stage') setBanner('STAGE ' + d.stage + ' OVER', 'yellow');
-    if (type === 'checkered') setBanner('CHECKERED FLAG', 'checker');
-    if (type === 'cautionCall') showPitCard(d);
-    if (type === 'done') { setBanner('FINAL', 'checker'); renderSide(); }
+  // timed overlays (start graphic, splashes, lower thirds); CSS animates them with transform/opacity only
+  function fxShow(key, html, ms, where) {
+    const R = ui.race; const host = $(where || '#fx'); if (!R || !host) return;
+    const el = document.createElement('div'); el.className = 'fx-item fx-' + key; el.innerHTML = html; host.appendChild(el);
+    if (R.fx[key]) R.fx[key].remove(); R.fx[key] = el;
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => { el.remove(); if (R.fx[key] === el) delete R.fx[key]; }, 320); }, ms);
   }
+  function splash(text, cls, sub) { fxShow('splash', `<div class="splash ${cls}"><div class="sp-band">${T(text, VIEW.h <= 370 ? 3 : 4, SH)}</div>${sub ? `<div class="sp-sub ol1">${U.esc(sub)}</div>` : ''}</div>`, 1500); }
+  function lowerThird(kind, html) { fxShow('lt', `<div class="lt-card ${kind}">${html}</div>`, 2800, '#lt'); }
+  const chip = (e) => `<span class="nchip" style="background:${e.livery.body};color:${e.livery.num || '#141414'};box-shadow:inset 0 -2px 0 ${e.livery.stripe}">${e.number}</span>`;
+  const tag3 = (c) => c.isPlayer ? 'YOU' : String(c.e.driverShort.split(' ').pop()).replace(/[^A-Z]/gi, '').slice(0, 3).toUpperCase();
+  // CAUTION: a hazard-stripe banner slams in, then shrinks into a slim strip under the top bar until the green flag
+  function cautionBanner(reason) {
+    const el = $('#cban'); if (!el) return; el.className = 'cban big'; el.innerHTML = `<div class="cb-band">${T('CAUTION', VIEW.h <= 370 ? 4 : 5, { color: '#141414' })}</div><div class="cb-sub">${U.esc(reason || 'YELLOW FLAG')}</div>`;
+    clearTimeout(ui.race.cbT); ui.race.cbT = setTimeout(() => { if (el.classList.contains('big')) { el.className = 'cban mini'; el.innerHTML = `<div class="cb-band">CAUTION · ${U.esc(reason || 'YELLOW FLAG')} · PACE CAR LEADS</div>`; } }, 1500);
+  }
+  function raceEvent(type, d) {
+    const R = ui.race; if (!R || !R.race) return;
+    if (type === 'msg') { const el = $('#ticker'); if (el && d) { el.textContent = d.text; el.className = 'race-ticker ol1 ' + (['player', 'bad', 'yellow'].includes(d.kind) ? d.kind : ''); } }
+    if (type === 'caution') { setBanner('CAUTION', 'yellow'); cautionBanner(d && d.reason); }
+    if (type === 'green') { setBanner('GREEN FLAG', 'green'); const cb = $('#cban'); if (cb) { cb.className = 'cban'; cb.innerHTML = ''; } if (d && d.restart) { R.white = false; splash('RESTART', 'green', 'GREEN FLAG · LAP ' + Math.min(R.race.laps, R.race.leaderLaps() + 1) + ' OF ' + R.race.laps); } }
+    if (type === 'stage') { setBanner('STAGE ' + d.stage + ' OVER', 'yellow'); splash('STAGE ' + d.stage + ' OVER', 'stage', d.winner ? '#' + d.winner.e.number + ' ' + d.winner.e.driverShort + ' WINS THE STAGE' : ''); }
+    if (type === 'checkered') { setBanner('CHECKERED FLAG', 'checker'); const w = d && d.winner; const cb = $('#cban'); if (cb) { cb.className = 'cban'; cb.innerHTML = ''; }
+      fxShow('finish', `<div class="finish"><div class="cflag"><i></i></div><div class="fin-txt">${T('CHECKERED FLAG', VIEW.h <= 370 ? 3 : 4, SH)}${w ? `<div class="fin-win ol1">${chip(w.e)} ${U.esc(w.e.driverShort)} WINS${w.isPlayer ? ' - THAT\'S YOUR CAR!' : ''}</div>` : ''}</div></div>`, 3600); }
+    if (type === 'cautionCall') showPitCard(d);
+    if (type === 'done') { setBanner('FINAL', 'checker'); R.menu = null; renderSide(); }
+    renderTop(); updateTower();
+  }
+  // kept for tests/tools: the old banner text now lives hidden; the top bar shows the flag
   function setBanner(text, cls) { const b = $('#banner'); if (b) { b.textContent = text; b.className = 'race-banner ol1 ' + cls; } }
+  function flagState(race) {
+    const ord = race.order(); const lead = ord[0]; const ll = race.leaderLaps();
+    if (race.phase !== 'racing' || (lead && lead.status === 'fin')) return 'checker';
+    if (race.flag === 'yellow') return 'yellow';
+    return ll === race.laps - 1 ? 'white' : 'green';
+  }
+  // thin top bar: team (or car tabs) | flag + LAP x/y + STAGE | CAM, speed, SKIP (48px tap areas, slim look)
+  function renderTop() {
+    const R = ui.race; const el = $('#tvtop'); if (!el || !R) return; const race = R.race; const s = S();
+    const flag = flagState(race); const ll = race.leaderLaps(); const lap = Math.min(race.laps, Math.max(1, ll + (race.phase === 'racing' ? 1 : 0)));
+    const stg = !race.stages.length ? '' : race.stage <= race.stages.length ? 'STAGE ' + race.stage : 'FINAL STAGE';
+    const team = race.teamCars(); const camLbl = R.view && R.view.mode === 'follow' ? 'FOLLOW' : 'TRACK';
+    const key = [flag, lap, stg, R.sel, R.speed, camLbl, race.phase].join('|'); if (el._k === key) return; el._k = key;
+    if (R.white === false && flag === 'white') { R.white = true; splash('WHITE FLAG', 'white', 'FINAL LAP!'); }
+    el.className = 'tv-top f-' + flag;
+    const left = team.length > 1 ? team.map(c => `<button class="tvt-btn car ${R.sel === c.id ? 'sel' : ''}" data-act="raceSel" data-arg="${c.id}"${R.sel === c.id ? '' : KB('t arrowleft arrowright', 'T')}><span class="sw" style="background:${c.e.livery.body}"></span>#${c.e.number}</button>`).join('')
+      : `<span class="tvt-team">${T(s.team.name.length > 16 ? s.team.name.slice(0, 16) : s.team.name, 2, SH)}</span>`;
+    const ft = { green: '', yellow: 'CAUTION ', white: 'WHITE FLAG ', checker: 'FINISH ' }[flag];
+    el.innerHTML = `<div class="tvt-l">${left}</div><div class="tvt-mid"><span class="flagico f-${flag}"><i></i></span><span class="tvt-lap">${ft}LAP ${lap}/${race.laps}</span>${stg ? `<span class="tvt-stg">${stg}${race.stage <= race.stages.length ? ' · ENDS L' + race.stages[race.stage - 1] : ''}</span>` : ''}</div>
+      <div class="tvt-r">${race.phase === 'done' ? '' : `<button class="tvt-btn" data-act="raceCam"${KB('c')}>${camLbl === 'FOLLOW' ? 'FOLLOW' : 'TRACK'}</button><button class="tvt-btn ${R.speed === 4 ? 'sel' : ''}" data-act="raceSpeed" data-arg="${R.speed === 4 ? 1 : 4}"${KB('f', 'F')}>${R.speed}X</button><button class="tvt-btn skip" data-act="raceSkip">SKIP &#9654;&#9654;</button>`}</div>`;
+  }
   const PIT_LABEL = { four: '4 TIRES', two: '2 TIRES', fuel: 'FUEL ONLY', stay: 'STAY OUT' };
+  const PIT_ICON = { four: 'four', two: 'two', fuel: 'fuel', stay: 'flag', cancel: 'flag' };
+  function stopEst(R, c, k) { if (k === 'stay' || k === 'cancel') return ''; const t = RaceSim.PIT_TIME[k] * R.race.lapTime * (1.3 - (c ? c.crew : 0.5) * 0.5) + (R.adj ? 0.1 * R.race.lapTime : 0); return '~' + (t * R.FS).toFixed(0) + 'S'; }
+  // a caution pit call (race paused until you pick) shows in the pit-wall strip, so the track stays in view
   function showPitCard(d) {
-    const R = ui.race; R.card = true; const el = $('#pitcard'); if (!el) return;
-    if (d.carId && d.carId !== R.sel) { R.sel = d.carId; if (R.view) R.view.followId = R.sel; renderSide(); }
-    R.callId = d.carId;
-    const who = d.multi ? `CAR ${d.slot} · #${d.number}: ` : '';
-    const btn = (k, col, sub) => `<button class="btn ${col} ${d.suggestion === k ? 'suggest' : ''}" data-act="pitChoice" data-arg="${k}"${KB({ four: '1', two: '2', fuel: '3', stay: '4' }[k] + (d.suggestion === k ? ' enter space' : ''))}>${PIT_LABEL[k]}<small>${sub}</small></button>`;
-    el.innerHTML = `<div class="pitcard"><div class="panel"><div class="row"><span class="tag" style="background:#ffd000;color:#1b1b1b">CAUTION</span><b class="grow ol1">${who}PIT ROAD IS OPEN!</b></div>
-      <div class="small" style="margin-top:6px;line-height:1.5">YOU ARE P${d.pos} · TIRES ${Math.round(d.tire * 100)}% · FUEL ${d.fuelLaps.toFixed(0)} LAPS · ${d.lapsLeft} LAPS TO GO${d.damage > 0.05 ? ' · DAMAGE ' + Math.round(d.damage * 100) + '%' : ''}<br>CREW CHIEF SUGGESTS: <span style="color:#ffd000">${PIT_LABEL[d.suggestion]}</span></div>
-      <div class="pitgrid">${btn('four', 'green', 'SLOWEST STOP, FULL GRIP')}${btn('two', 'blue', 'QUICKER STOP, HALF GRIP')}${btn('fuel', 'orange', 'SPLASH & GO')}${btn('stay', 'red', 'KEEP TRACK POSITION')}</div></div></div>`;
+    const R = ui.race; R.card = true; R.cardD = d;
+    if (d.carId && d.carId !== R.sel) { R.sel = d.carId; if (R.view) R.view.followId = R.sel; renderTop(); }
+    R.callId = d.carId; R.menu = { kind: 'caution', d };
+    const el = $('#ticker'); if (el) { el.textContent = (d.multi ? '#' + d.number + ': ' : '') + 'PIT ROAD IS OPEN! P' + d.pos + ' · TIRES ' + Math.round(d.tire * 100) + '% · FUEL ' + d.fuelLaps.toFixed(0) + ' LAPS · ' + d.lapsLeft + ' TO GO · CREW CHIEF: ' + PIT_LABEL[d.suggestion]; el.className = 'race-ticker ol1 yellow'; }
+    renderSide();
   }
   function renderSide() {
     const R = ui.race; const el = $('#side'); if (!el || !R) return; const race = R.race;
-    const sp = k => `<button class="btn ${R.speed === k ? 'yellow sel' : 'dark'}" data-act="raceSpeed" data-arg="${k}"${R.speed === k ? '' : KB('f', 'F')}>${k}X</button>`;
     if (race.phase === 'done') {
-      el.innerHTML = `<div class="mystat" id="mystat"></div><button class="btn green" style="min-height:70px" data-act="raceResults"${KB('enter space', 'ENTER')}>${T('RESULTS >', 2)}</button>`;
+      el.className = 'race-side pw3'; el.innerHTML = `<div class="mystat pwg" id="mystat"></div><button class="btn green pw-res" data-act="raceResults"${KB('enter space', 'ENTER')}>${T('RESULTS >', 2)}</button>`;
       updateSide(); return;
     }
-    const p = race.player(R.sel); const m = p ? p.mode : 'normal';
-    const mb = (k, col) => `<button class="btn ${m === k ? col + ' sel' : 'dark'}" data-act="raceMode" data-arg="${k}"${KB({ push: '1', normal: '2', save: '3' }[k])}>${k === 'normal' ? 'NORM' : k.toUpperCase()}</button>`;
-    const team = race.teamCars();
-    const camLbl = R.view && R.view.mode === 'follow' ? 'FOLLOW' : 'TRACK';
-    const row2 = team.length > 1 ? `<div class="seg c3">${team.map(c => `<button class="btn ${R.sel === c.id ? (c.slot === 2 ? 'teal' : 'yellow') + ' sel' : 'dark'} cartab" data-act="raceSel" data-arg="${c.id}"${R.sel === c.id ? '' : KB('t arrowleft arrowright', 'T')}><span class="sw" style="background:${c.e.livery.body}"></span>#${c.e.number}</button>`).join('')}<button class="btn blue" data-act="raceCam"${KB('c')}>${camLbl === 'FOLLOW' ? 'FOL' : 'CAM'}</button></div>`
-      : `<button class="btn blue" data-act="raceCam"${KB('c')}>CAM: ${camLbl}</button>`;
-    el.innerHTML = `<div class="seg c3">${sp(1)}${sp(4)}<button class="btn orange" data-act="raceSkip">SKIP</button></div>
-      ${row2}
-      <div class="mystat" id="mystat"></div>
-      <div class="seg c3">${mb('push', 'red')}${mb('normal', 'blue')}${mb('save', 'green')}</div>
-      <button class="btn red" id="pitbtn" data-act="racePit"${KB('4 p', '4')}>PIT NOW</button>`;
+    const p = race.player(R.sel);
+    if (R.menu) {
+      const M = R.menu; const caution = M.kind === 'caution'; const sugg = caution ? M.d.suggestion : null; const act = caution ? 'pitChoice' : 'pitNow';
+      const keys = caution ? [['four', 'green'], ['two', 'blue'], ['fuel', 'orange'], ['stay', 'red']] : [['four', 'green'], ['two', 'blue'], ['fuel', 'orange'], ['cancel', 'grey']];
+      const btn = ([k, col]) => `<button class="btn ${col} pm2 ${sugg === k ? 'suggest' : ''}" data-act="${act}" data-arg="${k}"${KB({ four: '1', two: '2', fuel: '3', stay: '4', cancel: '4 escape' }[k] + (sugg === k ? ' enter space' : ''), k === 'cancel' ? 'ESC' : undefined)}>${PW.icon(PIT_ICON[k], 2)}<span>${k === 'cancel' ? 'CANCEL' : PIT_LABEL[k]}<small>${k === 'cancel' ? 'STAY OUT' : k === 'stay' ? 'TRACK POS' : stopEst(R, p, k)}</small></span></button>`;
+      el.className = 'race-side pw3 menu' + (caution ? ' yel' : '');
+      el.innerHTML = `<div class="pm2-h">${caution ? 'CAUTION · PIT?' : 'PIT CALL #' + (p ? p.e.number : '')}${sugg ? `<small>CHIEF: ${PIT_LABEL[sugg]}</small>` : ''}</div>${keys.map(btn).join('')}
+        <button class="btn ${R.adj ? 'yellow sel' : 'dark'} pm2 adj" data-act="pitAdj"${KB('a', 'A')}>${PW.icon('wrench', 2)}<span>ADJUST ${R.adj ? 'ON' : 'OFF'}<small>${R.adj ? '+' + Math.round(0.1 * race.lapTime * R.FS) + 'S, BETTER CAR' : 'CHASSIS TWEAK'}</small></span></button>`;
+      return;
+    }
+    const m = p ? p.mode : 'normal'; const yellow = race.flag === 'yellow';
+    const mb = (k, col, ic) => `<button class="btn ${m === k ? col + ' sel' : 'dark'} pace-btn ${yellow ? 'dim' : ''}" data-act="raceMode" data-arg="${k}"${KB({ push: '1', normal: '2', save: '3' }[k])}><span class="pb-ar">${ic}</span>${k === 'normal' ? 'NORM' : k.toUpperCase()}</button>`;
+    el.className = 'race-side pw3';
+    el.innerHTML = `<div class="pace">${mb('push', 'red', '&#9650;')}${mb('normal', 'blue', '&#9644;')}${mb('save', 'green', '&#9660;')}</div>
+      <button class="btn ${yellow ? 'yellow glow' : 'red'} pitnow" id="pitbtn" data-act="racePit"${KB('4 p', '4')}>${PW.icon('wrench', 2)}<span id="pitlbl">PIT NOW</span></button>
+      <div class="mystat pwg" id="mystat"></div>`;
     updateSide();
   }
+  function gapOf(R, a, b) { if (!a || !b) return null; const dl = a.d - b.d; if (dl >= 1) return { laps: Math.floor(dl) }; return { s: dl * R.race.lapTime * R.F }; }
   function updateSide() {
     const R = ui.race; if (!R) return; const race = R.race; const p = race.player(R.sel); const el = $('#mystat'); if (!el || !p) return;
-    const multi = race.teamCars().length > 1;
-    const pos = race.positionOf(p);
-    const status = p.status === 'dnf' ? 'OUT: ' + p.reason : p.status === 'fin' ? 'FINISHED' : p.pit ? (p.pit.phase === 'wait' ? 'PITTING NEXT LAP' : 'ON PIT ROAD') : (race.flag === 'yellow' ? 'UNDER CAUTION' : 'RUNNING');
-    el.innerHTML = `<div class="row" style="justify-content:space-between"><span class="ol1" style="font-size:18px">P${pos}</span><span>${multi ? 'CAR ' + p.slot + ' ' : ''}#${p.e.number}</span></div><div>${status}${multi ? ' · ' + U.esc(p.e.driverShort.split(' ').pop().slice(0, 9)) : ''}</div>
-      <div style="margin-top:3px">TIRES ${Math.round(p.tire * 100)}%</div>${bar(p.tire, 1, p.tire > 0.6 ? '#2ecc40' : p.tire > 0.4 ? '#ffd000' : '#ff4136')}
-      <div>FUEL ${(p.fuel * race.T.fuelLaps).toFixed(1)} LAPS</div>${bar(p.fuel, 1, '#2f8cff')}${p.damage > 0.03 ? `<div style="color:#ff6b6b">DAMAGE ${Math.round(p.damage * 100)}%</div>` : ''}`;
-    const pb = $('#pitbtn'); if (pb) { const can = p.status === 'run' && !p.pit; pb.disabled = !can; pb.textContent = p.pit ? 'PIT CALLED' : 'PIT NOW'; }
+    const ord = race.order(); const i = ord.indexOf(p); const pos = race.positionOf(p);
+    const status = p.status === 'dnf' ? 'OUT: ' + p.reason : p.status === 'fin' ? 'FINISHED' : p.pit ? (p.pit.phase === 'wait' ? 'PITTING' : 'PIT ROAD') : (race.flag === 'yellow' ? 'CAUTION' : 'RUNNING');
+    const fg = g => !g ? '--' : g.laps ? g.laps + 'L' : g.s.toFixed(1);
+    const ahead = i > 0 ? ord[i - 1] : null, behind = i < ord.length - 1 ? ord[i + 1] : null;
+    const tcol = v => v > 0.6 ? '#2ecc40' : v > 0.4 ? '#ffd000' : '#ff4136';
+    // one tire number in the sim; on ovals the right side wears a bit faster, so the corners read like a real tire sheet
+    const t = p.tire, oval = race.type !== 'road'; const tires = [['LF', Math.pow(t, oval ? 0.85 : 1)], ['RF', t], ['LR', Math.pow(t, oval ? 0.7 : 0.9)], ['RR', Math.pow(t, oval ? 0.92 : 0.95)]];
+    const fl = p.fuel * race.T.fuelLaps; const lapsLeft = race.laps - race.leaderLaps();
+    const key = [pos, status, Math.round(t * 50), Math.round(p.fuel * 40), ahead && ahead.id, behind && behind.id, fg(gapOf(R, ahead, p)), fg(gapOf(R, p, behind)), Math.round(p.damage * 20)].join('|');
+    if (el._k !== key) { el._k = key;
+      el.innerHTML = `<div class="pw-top"><span class="pw-pos ol1">P${pos}</span><span class="pw-st">#${p.e.number}<br><span class="${p.pit ? 'neon' : race.flag === 'yellow' ? 'yl' : ''}">${status}</span></span></div>
+        <div class="tires4">${tires.map(([n, v]) => `<span class="t4"><i style="border-color:${tcol(v)}"></i>${n}</span>`).join('')}<b>${Math.round(t * 100)}%</b></div>
+        <div class="gg">${PW.icon('fuel', 1)}<div class="gg-bar"><i style="width:${Math.round(p.fuel * 100)}%;background:${fl < lapsLeft ? 'linear-gradient(90deg,#ff4136,#ff9f1c)' : 'linear-gradient(90deg,#ff9f1c,#ffd000)'}"></i><b>${fl.toFixed(0)}L</b></div></div>
+        <div class="pw-gaps"><span>AHEAD <b>${ahead ? (ahead.status === 'dnf' ? 'OUT' : '-' + fg(gapOf(R, ahead, p))) : 'LEADER'}</b></span><span>BEHIND <b class="gn">${behind ? '+' + fg(gapOf(R, p, behind)) : '--'}</b></span></div>${p.damage > 0.03 ? `<div class="pw-dmg">DAMAGE ${Math.round(p.damage * 100)}%</div>` : ''}`; }
+    const pb = $('#pitbtn'); if (pb) { const can = p.status === 'run' && !p.pit; pb.disabled = !can; const l = $('#pitlbl'); if (l) l.textContent = p.pit ? 'PIT CALLED' : 'PIT NOW'; }
   }
+  // live pit-stop clock for team cars (counts while stopped, then shows the final time)
+  function pitClock() {
+    const R = ui.race; if (!R) return; const el = $('#pitclock'); if (!el) return;
+    let html = '';
+    for (const c of R.race.teamCars()) {
+      if (c.pit && c.pit.phase === 'stop' && c.pit.total) { const t = (c.pit.total - Math.max(0, c.pit.timer)) * R.FS; html += `<div class="pc-card live">${chip(c.e)}<span>PIT STOP · ${PIT_LABEL[c.pit.type]}${c.pit.adj ? ' + ADJ' : ''}</span><b>${t.toFixed(1)}S</b></div>`; }
+      else if (c.lastStop && R.race.t - c.lastStop.t < 2.5 * Math.max(1, R.speed)) html += `<div class="pc-card done">${chip(c.e)}<span>STOP · ${PIT_LABEL[c.lastStop.type]}</span><b>${(c.lastStop.time * R.FS).toFixed(1)}S</b></div>`;
+    }
+    if (el._h !== html) { el._h = html; el.innerHTML = html; }
+  }
+  // left leaderboard: top 3 fixed, the rest pages through like TV; your cars always show. Tap the header to collapse it.
   function updateTower() {
-    const R = ui.race; if (!R) return; const race = R.race; const ord = race.order(); const lead = ord[0];
-    const lap = Math.min(race.laps, Math.max(1, race.leaderLaps() + (race.phase === 'racing' ? 1 : 0)));
-    const stg = !race.stages.length ? 'NO STAGES - TO THE FLAG' : race.stage <= race.stages.length ? 'STAGE ' + race.stage + ' ENDS L' + race.stages[race.stage - 1] : 'FINAL STAGE';
-    const h = $('#tw-head'); if (h) h.innerHTML = `${T('LAP ' + lap + '/' + race.laps, 2, { shadow: '#1b1b1b' })}<div class="tiny" style="margin-top:3px">${stg}</div>`;
+    const R = ui.race; if (!R) return; const race = R.race; const ord = race.order(); const lead = ord[0]; const ll = race.leaderLaps();
+    renderTop();
+    const yellow = race.flag === 'yellow' && race.phase === 'racing';
+    const h = $('#tw-head'); const hk = (R.collapsed ? 'c' : 'o') + (yellow ? 'y' : 'g');
+    if (h && h._k !== hk) { h._k = hk; h.className = 'tvb-head' + (yellow ? ' yel' : ''); h.innerHTML = R.collapsed ? '&#9654;' : `<span>${yellow ? 'CAUTION - FIELD FROZEN' : 'INTERVAL'}</span><i>&#9664;</i>`; }
+    if (R.snapLap !== ll) { R.prevSnap = R.snap; R.snap = {}; ord.forEach((c, i) => { R.snap[c.id] = i; }); R.snapLap = ll; }
+    if (race.phase === 'racing' && race.flag === 'green' && ll >= 1 && ord[1] && race.t - R.battleT > 25) { const g = gapOf(R, ord[0], ord[1]); if (g && !g.laps && g.s < 0.45 && ord[1].status === 'run') { R.battleT = race.t; lowerThird('battle', `<span class="lt-k">BATTLE FOR THE LEAD</span>${chip(ord[0].e)}<span class="lt-n">${U.esc(ord[0].e.driverShort.split(' ').pop())}</span><i>VS</i>${chip(ord[1].e)}<span class="lt-n">${U.esc(ord[1].e.driverShort.split(' ').pop())}</span><b>${g.s.toFixed(2)}S</b>`); } }
+    if (race.fastLap && race.fastLap !== R.lastFast) { const fl = race.fastLap; const c = race.cars.find(x => x.id === fl.id); if (R.lastFast !== null && c) lowerThird('fast', `<span class="lt-k">FASTEST LAP</span>${chip(c.e)}<span class="lt-n">${U.esc(c.e.driverShort.split(' ').pop())}</span><b>${tvs(fl.time * R.F)}</b><span class="lt-s">LAP ${fl.lap}</span>`); R.lastFast = fl; }
+    if (R.lastFast === null && race.fastLap) R.lastFast = race.fastLap;
     const list = $('#tw-list'); if (!list) return;
-    const maxRows = Math.max(6, Math.floor((list.clientHeight || 300) / 17));
-    const late = ord.map((c, i) => [c, i]).filter(([c, i]) => c.isPlayer && i >= maxRows).map(([c]) => c);
-    let show = ord.slice(0, maxRows - late.length).concat(late);
+    const maxRows = Math.max(5, Math.floor((list.clientHeight || 300) / 19));
+    const pinned = ord.slice(0, 3); const mine = ord.filter(c => c.isPlayer);
+    const restN = Math.max(1, maxRows - 3); const rest = ord.slice(3);
+    R.pageT += 1; if (R.pageT >= 16) { R.pageT = 0; R.page++; }
+    const pages = Math.max(1, Math.ceil(rest.length / restN)); const pg = R.page % pages;
+    let view = rest.slice(pg * restN, pg * restN + restN);
+    const missing = mine.filter(c => !pinned.includes(c) && !view.includes(c));
+    if (missing.length) view = view.slice(0, Math.max(0, restN - missing.length)).concat(missing);
+    const show = pinned.concat(view);
     list.innerHTML = show.map(c => {
       const i = ord.indexOf(c); let gap = '';
-      if (c.status === 'dnf') gap = 'OUT'; else if (c.pit && c.pit.phase !== 'wait') gap = 'PIT';
-      else if (i === 0) gap = race.phase === 'racing' ? 'LEAD' : 'WIN';
-      else { const dl = lead.status === 'fin' && c.status === 'fin' ? lead.laps - c.laps : (lead.status === 'fin' ? lead.laps : lead.d) - c.d; gap = dl >= 1 ? '-' + Math.floor(dl) + 'L' : '+' + (dl * race.lapTime * 3).toFixed(1); }
-      const cls = c.isPlayer ? (c.slot === 2 ? 'me me2' : 'me') : c.status === 'dnf' ? 'out' : (c.pit && c.pit.phase !== 'wait') ? 'pit' : '';
-      return `<div class="tw-row ${cls}"><b>${i + 1}</b><span class="sw" style="background:${c.e.livery.body}"></span><span>#${c.e.number}</span><span class="nm"><span>${U.esc(c.e.driverShort.split(' ').pop().slice(0, 8))}</span><span class="gap">${gap}</span></span></div>`;
+      const inPit = c.pit && c.pit.phase !== 'wait';
+      if (c.status === 'dnf') gap = '<span class="g out">OUT</span>'; else if (inPit) gap = '<span class="g pit">PIT</span>';
+      else if (yellow) gap = '<i class="ydot"></i>';
+      else if (i === 0) gap = `<span class="g">${race.phase === 'racing' ? 'LEADER' : 'WIN'}</span>`;
+      else { const dn = lead.status === 'fin' && c.status === 'fin' ? lead.laps - c.laps : 0; const g = dn > 0 ? { laps: dn } : gapOf(R, ord[i - 1], c); gap = `<span class="g">${!g ? '' : g.laps ? '-' + g.laps + 'L' : '+' + Math.max(0, g.s || 0).toFixed(2)}</span>`; }
+      const was = R.prevSnap && R.prevSnap[c.id] !== undefined ? R.prevSnap[c.id] : i; const ch = was - i;
+      const arr = ch > 0 ? '<i class="ar up">&#9650;</i>' : ch < 0 ? '<i class="ar dn">&#9660;</i>' : '<i class="ar"></i>';
+      const cls = c.isPlayer ? (c.slot === 2 ? 'me me2' : 'me') : c.status === 'dnf' ? 'out' : '';
+      return `<div class="tw-row tv2 ${cls} ${i === 2 && show.length > 3 ? 'cut' : ''}"><b>${i + 1}</b><i class="stripe" style="background:${c.e.livery.stripe === c.e.livery.body ? '#f4f4f4' : c.e.livery.stripe}"></i>${chip(c.e)}<span class="nm">${tag3(c)}</span>${gap}${arr}</div>`;
     }).join('');
   }
   function finishRaceAndShowResults() {
@@ -839,7 +965,7 @@ const UI = (() => {
         <div class="col"><div class="panel" style="padding:4px">${resultsTable(r)}</div></div></div>`));
     }
     render(page('RACE RESULTS', `<div class="cols"><div class="col narrow"><div class="panel ${bestPos === 1 ? 'orange' : bestPos <= 10 ? 'green' : 'red'}" style="text-align:center">${head}</div>${notes}
-      <div class="panel small" style="line-height:1.7">${lines}<div class="row" style="justify-content:space-between;border-top:2px solid #1b1b1b;margin-top:4px"><b>NET</b><b style="color:${sum.net < 0 ? '#ff6b6b' : '#7dff7d'}">${sum.net < 0 ? '-' : '+'}${U.money(Math.abs(sum.net))}</b></div></div>
+      <div class="panel small res-money" style="line-height:1.7">${lines}<div class="row" style="justify-content:space-between;border-top:2px solid #1b1b1b;margin-top:4px"><b>NET</b><b style="color:${sum.net < 0 ? '#ff6b6b' : '#7dff7d'}">${sum.net < 0 ? '-' : '+'}${U.money(Math.abs(sum.net))}</b></div></div>
       <div class="panel small" style="line-height:1.6">REP ${sum.repD >= 0 ? '+' : ''}${sum.repD.toFixed(1)} · XP +${sum.xp}${sum.levelUp ? ' · <span style="color:#ffd000">LEVEL UP! LV ' + s.level + '</span>' : ''}${sum.drvUp && sum.drvUp.length ? '<br>' + sum.drvUp.map(([d, k]) => U.esc(Game.driverShort(d)) + ' +1 ' + (DATA.DRIVER_STATS.find(x => x[0] === k) || [k, k])[1]).join(' · ') : ''}${sum.confD !== undefined ? '<br>BOSS CONFIDENCE ' + (sum.confD >= 0 ? '+' : '') + sum.confD.toFixed(0) + ' (NOW ' + Math.round(s.hired ? s.hired.confidence : 0) + '%)' : ''}</div>
       <button class="btn green wide" style="min-height:56px" data-act="afterResults"${KB('enter space', 'ENTER')}>${T('CONTINUE >', 2)}</button></div>
       <div class="col"><div class="panel" style="padding:4px">${resultsTable(r)}</div></div></div>`));
@@ -873,7 +999,7 @@ const UI = (() => {
         const nx = DATA.SERIES[ss.promo.next];
         opts += ss.promo.eligible ? `<div class="panel green"><h3>YOU'VE BEEN SCOUTED!</h3><div class="small" style="line-height:1.5">THE ${nx.name} WANTS YOU. BUY-IN: <span class="neon">${U.money(ss.promo.cost)}</span>${ss.pos === 1 ? ' (CHAMPION DISCOUNT!)' : ''}. ${nx.cars} CARS, TOUGHER RIVALS, MUCH BIGGER MONEY.</div>
           <button class="btn ${ss.promo.afford ? 'orange' : 'grey'} wide" style="margin-top:8px" data-act="seasonChoice" data-arg="promote">${ss.promo.afford ? 'MOVE UP TO ' + nx.short + ' (' + U.moneyShort(ss.promo.cost) + ')' : 'NEED ' + U.moneyShort(ss.promo.cost) + ' TO MOVE UP'}</button></div>`
-          : `<div class="panel"><h3>PROMOTION</h3><div class="small" style="line-height:1.5">TO MOVE UP TO THE ${nx.name} YOU NEED A TOP-${ss.promo.needPos || 5} POINTS FINISH OR ${ss.promo.needWins || 2} WINS, PLUS ${U.money(nx.buyIn)}. NOT THIS YEAR - BUILD AND COME BACK STRONGER.</div></div>`;
+          : `<div class="panel"><h3>PROMOTION</h3><div class="small" style="line-height:1.5">TO MOVE UP TO THE ${nx.name} YOU NEED A TOP-${ss.promo.needPos || 5} POINTS FINISH OR ${ss.promo.needWins || 2} WINS, PLUS ${U.money(Game.buyInFor(ss.promo.next))}. NOT THIS YEAR - BUILD AND COME BACK STRONGER.</div></div>`;
       }
       opts += `<button class="btn blue wide" style="min-height:56px" data-act="seasonChoice" data-arg="stay">${Game.isTop() ? 'RUN ANOTHER ' + sr.short + ' SEASON' : 'STAY IN ' + sr.short + ' NEXT SEASON'}</button>`;
     } else {
@@ -900,9 +1026,9 @@ const UI = (() => {
       <div class="panel small" style="line-height:1.7"><div class="row" style="justify-content:space-between"><span>POINTS-FUND PRIZE</span><span style="color:#7dff7d">+${U.money(ss.prize)}</span></div><div class="row" style="justify-content:space-between"><span>BANK</span><span>${U.money(s.money)}</span></div><div class="row" style="justify-content:space-between"><span>REPUTATION</span><span>${Math.round(s.rep)}/100</span></div></div></div>
       <div class="se-col"><div class="panel se-champ"><span class="dp-title">${s.year} ${sr.short} CHAMPION</span><div class="row" style="flex-wrap:nowrap"><img class="pix" src="${Art.trophyURL('big', 'gold')}" style="width:42px;height:60px" alt=""><div style="min-width:0">${Art.carImg(champ.livery, champ.number, 3)}<div class="small nm1">#${champ.number} ${U.esc(champ.driver)}</div><div class="tiny">${U.esc(champ.team)}${mineChamp ? ' · <span class="neon">YOUR TEAM!</span>' : ''}</div></div></div></div>
         <div class="panel"><span class="dp-title">SEASON HIGHLIGHTS</span><div class="se-stats"><span><b>${ss.wins}</b>WINS</span><span><b>${pods}</b>PODIUMS</span><span><b>${top10}</b>TOP 10S</span><span><b>${best < 99 ? 'P' + best : '-'}</b>BEST</span><span><b>${led}</b>LAPS LED</span><span><b>${dnf}</b>DNFS</span></div>
-        <div class="se-strip">${strip}</div></div>
+        <div class="se-strip${s.schedule.length > 12 ? " many" : ""}">${strip}</div></div>
         <div class="panel"><span class="dp-title">TROPHIES WON THIS SEASON</span><div class="se-tros">${troHTML}</div></div></div>
-      <div class="se-col se-opts"><span class="dp-title neon">WHAT'S NEXT?</span>${opts}</div></div>`));
+      <div class="se-col se-opts"><span class="dp-title neon">WHAT'S NEXT?</span><div class="panel"><span class="dp-title">NEXT SEASON LENGTH (RACES)</span>${lenPicker(Game.seasonLen(), 'seasonLen', ss.paths ? undefined : s.seriesIdx)}</div>${opts}</div></div>`));
   }
   function firedScreen() {
     ui.screen = 'fired'; const s = S();
@@ -933,12 +1059,12 @@ const UI = (() => {
   }
 
   // ---------- actions ----------
-  const SCREENS = { hub, career, drivers, garage, facilities, sponsors, calendar, standings, news: newsScreen, profile, prep, seasonEnd, results, updates, trophies, free: freeScreen };
+  const SCREENS = { hub, career, drivers, garage, facilities, sponsors, calendar, standings, news: newsScreen, profile, prep, seasonEnd, results, updates, trophies, free: freeScreen, settings };
   function go(name) {
     closeModal(); if (ui.race && name !== 'race') { ui.race.stopped = true; ui.race = null; }
     // leaving a Free Mode race puts the career back exactly as it was
     if (Game.isFree() && !['prep', 'results'].includes(name)) { Game.endFree(); ui.prep = null; ui.artCache = {}; }
-    if (!S() && !['hub', 'career', 'profile', 'updates', 'free'].includes(name)) name = 'hub';
+    if (!S() && !['hub', 'career', 'profile', 'updates', 'free', 'settings'].includes(name)) name = 'hub';
     (SCREENS[name] || hub)(); const pb = $('.page-body'); if (pb) pb.scrollTop = 0;
   }
   function refresh() { const f = SCREENS[ui.screen]; if (f && ui.screen !== 'race') f(); }
@@ -949,8 +1075,8 @@ const UI = (() => {
     ncBack: () => { ui.nc.step = 'mode'; newCareerScreen(); },
     ncColor: (a) => { const [k, c] = a.split('|'); readNC(); ui.nc[k] = c; newCareerScreen(); },
     ncNum: (a) => { readNC(); ui.nc.number = ((ui.nc.number - 1 + +a + 99) % 99) + 1; newCareerScreen(); },
-    ncStartOwner: () => { readNC(); const nc = ui.nc; const e = nameErr(nc.profile, 'YOUR NAME') || nameErr(nc.team, 'A TEAM NAME'); if (e) return toast(e); markSeen(); Game.newCareer({ mode: 'owner', profile: nc.profile.trim(), teamName: nc.team.trim().toUpperCase(), number: nc.number, colors: { body: nc.body, stripe: nc.stripe } }); ui.nc = null; ui.artCache = {}; hub(); toast('CAREER STARTED! BUY A CAR IN THE GARAGE.'); },
-    ncTakeJob: (id) => { readNC(); const nc = ui.nc; const e = nameErr(nc.profile, 'YOUR NAME'); if (e) return toast(e); markSeen(); const job = nc.jobs.find(j => j.id === id); Game.newCareer({ mode: 'hired', profile: nc.profile.trim(), job }); ui.nc = null; ui.artCache = {}; hub(); toast('WELCOME TO ' + job.name + '!'); },
+    ncStartOwner: () => { readNC(); const nc = ui.nc; const e = nameErr(nc.profile, 'YOUR NAME') || nameErr(nc.team, 'A TEAM NAME'); if (e) return toast(e); markSeen(); Game.newCareer({ mode: 'owner', seasonLen: nc.len, profile: nc.profile.trim(), teamName: nc.team.trim().toUpperCase(), number: nc.number, colors: { body: nc.body, stripe: nc.stripe } }); ui.nc = null; ui.artCache = {}; hub(); toast('CAREER STARTED! BUY A CAR IN THE GARAGE.'); },
+    ncTakeJob: (id) => { readNC(); const nc = ui.nc; const e = nameErr(nc.profile, 'YOUR NAME'); if (e) return toast(e); markSeen(); const job = nc.jobs.find(j => j.id === id); Game.newCareer({ mode: 'hired', seasonLen: nc.len, profile: nc.profile.trim(), job }); ui.nc = null; ui.artCache = {}; hub(); toast('WELCOME TO ' + job.name + '!'); },
     newCareerAsk: () => confirmBox('START OVER? YOUR CURRENT CAREER WILL BE DELETED (EXPORT A SAVE CODE FIRST IF YOU WANT TO KEEP IT).', 'DELETE & START', () => A.newCareerYes(), 'red'),
     newCareerYes: () => { closeModal(); Game.wipe(); ui.nc = null; ui.artCache = {}; go('career'); },
     driverInfo: (id) => { ui.hireYears = 2; driverInfo(id); },
@@ -974,7 +1100,7 @@ const UI = (() => {
     teamDriver: (id) => teamDriverModal(id),
     careerHistory: () => historyModal(),
     ncPaint: (k) => { readNC(); ui.nc.paint = k; newCareerScreen(); },
-    raceSel: (id) => { const R = ui.race; R.sel = id; if (R.view) R.view.followId = id; renderSide(); },
+    raceSel: (id) => { const R = ui.race; if (R.menu) return; R.sel = id; if (R.view) R.view.followId = id; renderTop(); renderSide(); },
     buyCar: (id) => { const e = Game.buyCar(id); if (e) return toast(e); ui.artCache = {}; garage(); toast('CAR BOUGHT! NOW HIRE A DRIVER.'); },
     rnd: (a) => { const [p, t] = a.split('|'); const e = Game.startRnd(p, +t || 1); if (e) return toast(e); garage(); toast('R&D STARTED'); },
     build: (k) => { const e = Game.startBuild(k); if (e) return toast(e); facilities(); toast('CONSTRUCTION STARTED'); },
@@ -1000,21 +1126,23 @@ const UI = (() => {
       const s = S(); const tid = s.schedule[s.week - 1]; P.setupKey = k; P.grid = RaceSim.qualify(Game.buildEntries(tid, P.setup), DATA.TRACKS[tid].type); P.stage = 'qual'; prep(); },
     prepStyle: (k) => { ui.prep.style = k; prep(); }, prepMode: (k) => { ui.prep.mode = k; prep(); }, prepAsk: () => { ui.prep.ask = !ui.prep.ask; prep(); },
     startRace: () => startRace(),
-    raceSpeed: (k) => { ui.race.speed = +k; renderSide(); },
+    raceSpeed: (k) => { ui.race.speed = +k; renderTop(); },
     raceMode: (m) => { ui.race.race.setMode(m, ui.race.sel); renderSide(); },
-    raceCam: () => { const v = ui.race.view; v.setMode(v.mode === 'follow' ? 'full' : 'follow'); renderSide(); },
-    racePit: () => {
-      const el = $('#pitcard'); const R = ui.race; if (!R || R.race.phase === 'done') return;
-      const pc = R.race.player(R.sel); const multi = R.race.teamCars().length > 1;
-      el.innerHTML = `<div class="pitcard"><div class="panel"><b class="ol1">${multi ? 'CALL THE #' + pc.e.number + ' IN?' : 'CALL YOUR DRIVER IN?'}</b><div class="tiny" style="margin-top:4px">GREEN-FLAG STOPS COST ABOUT HALF A LAP.</div><div class="pitgrid">
-        <button class="btn green" data-act="pitNow" data-arg="four"${KB('1')}>4 TIRES<small>+ FUEL</small></button><button class="btn blue" data-act="pitNow" data-arg="two"${KB('2')}>2 TIRES<small>+ FUEL</small></button>
-        <button class="btn orange" data-act="pitNow" data-arg="fuel"${KB('3')}>FUEL ONLY<small>SPLASH</small></button><button class="btn grey" data-act="pitNow" data-arg="cancel"${KB('4 escape', '4')}>CANCEL<small>STAY OUT</small></button></div></div></div>`;
-    },
-    pitNow: (k) => { $('#pitcard').innerHTML = ''; if (k !== 'cancel') ui.race.race.requestPit(k, ui.race.sel); updateSide(); },
-    pitChoice: (k) => { const R = ui.race; R.card = false; $('#pitcard').innerHTML = ''; R.race.playerCautionChoice(k, R.callId); updateSide(); },
+    raceCam: () => { const v = ui.race.view; v.setMode(v.mode === 'follow' ? 'full' : 'follow'); renderTop(); },
+    racePit: () => { const R = ui.race; if (!R || R.race.phase === 'done') return; const pc = R.race.player(R.sel); if (!pc || pc.status !== 'run' || pc.pit) return; R.card = false; R.menu = { kind: 'green' }; renderSide(); },
+    pitAdj: () => { const R = ui.race; if (!R) return; R.adj = !R.adj; renderSide(); },
+    towerMode: () => { const R = ui.race; if (!R) return; R.collapsed = !R.collapsed; ui.boardCollapsed = R.collapsed; placeOverlays(); const h = $('#tw-head'); if (h) h._k = ''; updateTower(); },
+    pitNow: (k) => { const R = ui.race; R.menu = null; if (k !== 'cancel') R.race.requestPit(k, R.sel, R.adj); R.adj = false; renderSide(); },
+    pitChoice: (k) => { const R = ui.race; R.card = false; R.menu = null; R.race.playerCautionChoice(k, R.callId, k !== 'stay' && R.adj); R.adj = false; renderSide(); },
     raceSkip: () => { const R = ui.race; if (!R) return; $('#pitcard').innerHTML = ''; R.race.runToEnd(); finishRaceAndShowResults(); },
     raceResults: () => finishRaceAndShowResults(),
     afterResults: () => afterResults(),
+    // v1.4
+    ncLen: (a) => { readNC(); ui.nc.len = +a; newCareerScreen(); },
+    seasonLen: (a) => { Game.setSeasonLen(+a); if (ui.screen === 'seasonEnd') seasonEnd(); else settings(); toast('NEXT SEASON: ' + (+a ? a + ' RACES' : 'THE FULL SEASON')); },
+    raceLen: (a) => { SETTINGS.raceLen = a; settings(); toast('RACE LENGTH: ' + SETTINGS.raceLenName() + ' (FROM THE NEXT RACE)'); },
+    tutStart: () => { closeModal(); if (typeof TUT !== 'undefined') TUT.start(); },
+    tutSkip: () => { closeModal(); SETTINGS.tut = 'skipped'; toast('NO PROBLEM - THE TUTORIAL IS IN SETTINGS ANYTIME'); },
     seasonChoice: (a) => {
       const [t, id] = a.split('|'); const r = Game.finishSeason(t === 'job' ? { type: 'job', id } : t === 'path' ? { type: 'path', path: id } : { type: t });
       if (r === 'FIRED') return firedScreen();
@@ -1033,11 +1161,23 @@ const UI = (() => {
   function onResize(zoomChanged) {
     if (ui.screen === 'podium' && ui.pod) { ui.pod.resize(); return; }
     if (zoomChanged && !(ui.race && ui.race.view) && ui.screen !== 'hub' && ui.screen !== 'career' && SCREENS[ui.screen]) { const pb = $('.page-body'); const st = pb ? pb.scrollTop : 0; refresh(); const pb2 = $('.page-body'); if (pb2) pb2.scrollTop = st; return; }
-    if (ui.race && ui.race.view) { ui.race.view.resize(); updateTower(); return; }
+    if (ui.race && ui.race.view) { placeOverlays(); ui.race.view.resize(); const t = $('#tvtop'); if (t) t._k = ''; updateTower(); if (typeof TUT !== 'undefined') TUT.refresh(); return; }
     if (ui.screen === 'hub') hub(); else if (ui.screen === 'career' && S()) career();
+    if (typeof TUT !== 'undefined') TUT.refresh();
   }
   // v1.2.1: a patch (1.2 -> 1.2.1) only lights the NEW dot on the version label; a new minor version pops the modal
   const minorOf = v => String(v || '').split('.').slice(0, 2).join('.');
-  function maybeWhatsNew() { if (S() && minorOf(seenVersion()) !== minorOf(DATA.VERSION)) whatsNew(); else if (!S()) markSeen(); }
-  return { hub, go, onClick, onResize, toast, ui, refresh, maybeWhatsNew, whatsNew, podium, trophies };
+  function maybeWhatsNew() {
+    const firstLaunch = !S() && !seenVersion() && !SETTINGS.tut;
+    if (S() && minorOf(seenVersion()) !== minorOf(DATA.VERSION)) whatsNew(); else if (!S()) markSeen();
+    if (firstLaunch) tutOffer();
+  }
+  // v1.4: offered once on the very first launch
+  function tutOffer() {
+    SETTINGS.tut = 'offered';
+    modal(`<div class="big ol">WELCOME!</div><div class="small" style="margin:8px 0 12px;line-height:1.6">YOU RUN A RACE TEAM. YOU ARE THE BOSS, NOT THE DRIVER.<br>WANT A QUICK TOUR? IT TAKES ABOUT A MINUTE AND USES A PRACTICE TEAM.</div>
+      <div class="row" style="justify-content:flex-end;flex-wrap:nowrap"><button class="btn grey" style="min-height:48px" data-act="tutSkip"${KB('escape', 'ESC')}>SKIP</button><button class="btn green" style="min-height:48px;flex:1" data-act="tutStart"${KB('enter space', 'ENTER')}>${T('SHOW ME >', 2)}</button></div>`);
+  }
+  const run = (act, arg) => { const f = A[act]; if (f) f(arg); };
+  return { hub, go, onClick, onResize, toast, ui, refresh, maybeWhatsNew, whatsNew, podium, trophies, prep, startRace, results, finishRaceAndShowResults, settings, run, closeModal, modal, tutOffer };
 })();

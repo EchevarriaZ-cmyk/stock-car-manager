@@ -66,7 +66,10 @@ const RaceSim = (() => {
       });
       const n = this.cars.length;
       // v1.3: every car has its own box; the pole sitter gets the one nearest pit exit
-      this.cars.forEach((c, i) => { c.stall = 1 - (i + 0.5) / Math.max(1, n); });
+      // v1.4: split pit roads (Bristol, Martinsville): the front half of the grid gets the frontstretch boxes
+      const zs = this.geom.zones || [{ n }];
+      if (zs.length > 1) { const n0 = Math.ceil(n / 2); this.cars.forEach((c, i) => { if (i < n0) { c.pz = 0; c.stall = 1 - (i + 0.5) / n0; } else { c.pz = 1; c.stall = 1 - (i - n0 + 0.5) / Math.max(1, n - n0); } }); }
+      else this.cars.forEach((c, i) => { c.pz = 0; c.stall = 1 - (i + 0.5) / Math.max(1, n); });
       this.cars.forEach(c => c.lastFrac = this.frac(c.d));
       this.msg('GREEN FLAG! ' + (this.geom.event ? 'THE ' + this.geom.event + ' - ' : '') + this.laps + ' LAPS AT ' + this.geom.def.short, 'green');
     }
@@ -88,7 +91,8 @@ const RaceSim = (() => {
     positionOf(car) { return this.order().indexOf(car) + 1; }
     trackCars() { return this.cars.filter(c => c.status === 'run' && !(c.pit && c.pit.phase !== 'wait')); }
     setMode(m, id) { const p = this.player(id); if (p) p.mode = m; }
-    requestPit(type, id) { const p = this.player(id); if (p && p.status === 'run' && !p.pit) { p.pit = { type, phase: 'wait' }; this.msg(this.tag(p) + 'PIT CALL: ' + ({ four: '4 TIRES + FUEL', two: '2 TIRES + FUEL', fuel: 'FUEL ONLY' })[type], 'player'); } }
+    // v1.4: adj = a chassis adjustment during the stop (a little longer stop, a slightly better car for the rest of the race)
+    requestPit(type, id, adj) { const p = this.player(id); if (p && p.status === 'run' && !p.pit) { p.pit = { type, phase: 'wait', adj: !!adj }; this.msg(this.tag(p) + 'PIT CALL: ' + ({ four: '4 TIRES + FUEL', two: '2 TIRES + FUEL', fuel: 'FUEL ONLY' })[type] + (adj ? ' + ADJUSTMENT' : ''), 'player'); } }
     cautionInfo(p) { return { carId: p.id, number: p.e.number, slot: p.slot, multi: this.playerIds.length > 1, pos: this.positionOf(p), tire: p.tire, fuelLaps: p.fuel * this.T.fuelLaps, lapsLeft: this.laps - this.leaderLaps(), damage: p.damage, suggestion: cautionChoice(this, p, 'balanced') }; }
     // the race stays paused until every team car has its caution call
     nextCall() {
@@ -99,11 +103,11 @@ const RaceSim = (() => {
       }
       this.paused = false; return false;
     }
-    playerCautionChoice(choice, id) {
+    playerCautionChoice(choice, id, adj) {
       const p = this.player(id || this.callQueue[0]);
       this.callQueue = this.callQueue.filter(x => !p || x !== p.id);
       if (p && p.status === 'run') {
-        if (choice !== 'stay') { p.pit = { type: choice, phase: 'wait' }; this.msg(this.tag(p) + 'YOU CALLED ' + ({ four: '4 TIRES', two: '2 TIRES', fuel: 'FUEL ONLY' })[choice] + ' - PIT ROAD!', 'player'); }
+        if (choice !== 'stay') { p.pit = { type: choice, phase: 'wait', adj: !!adj }; this.msg(this.tag(p) + 'YOU CALLED ' + ({ four: '4 TIRES', two: '2 TIRES', fuel: 'FUEL ONLY' })[choice] + (adj ? ' + ADJUSTMENT' : '') + ' - PIT ROAD!', 'player'); }
         else this.msg(this.tag(p) + 'YOU STAY OUT - TRACK POSITION!', 'player');
       }
       if (!this.nextCall()) this.paused = false;
@@ -209,17 +213,19 @@ const RaceSim = (() => {
         const inPit = c.pit && c.pit.phase !== 'wait';
         if (c.spin > 0) c.spin -= dt;
         if (inPit) {
-          const prog = g.pitProg(this.frac(c.d));
+          c.pitLap = true;
+          const prog = g.pitProg(this.frac(c.d), c.pz);
           const pv = bv * 0.5; // pit road speed limit (longer v1.3 pit roads)
           if (c.pit.phase === 'lane') {
             desired = pv;
-            if (prog >= (g.boxProg ? g.boxProg(c.stall) : c.stall * g.pitRange)) {
+            if (prog >= g.boxProg(c.stall, c.pz)) {
               c.pit.phase = 'stop'; c.v = 0; desired = 0; if (g.boxLat) c.latT = g.boxLat;
               const base = PIT_TIME[c.pit.type] * this.lapTime;
               const ps = c.e.pit === undefined ? 50 : c.e.pit; // driver hitting the marks on pit road
               let time = base * (1.3 - c.crew * 0.5) * (1.07 - ps / 100 * 0.14) + (c.damage > 0.05 ? (0.2 + c.damage) * this.lapTime : 0);
               if (U.chance(Math.max(0.004, 0.07 - c.crew * 0.05 + (50 - ps) * 0.0006))) { time += 0.35 * this.lapTime; if (c.isPlayer) this.msg(this.tag(c) + 'PIT ROAD MISTAKE! SLOW STOP', 'bad'); }
-              c.pit.timer = time; c.pitCount++;
+              if (c.pit.adj) time += 0.1 * this.lapTime;
+              c.pit.timer = time; c.pit.total = time; c.pitCount++;
             }
           } else if (c.pit.phase === 'stop') {
             desired = 0; c.v = 0; c.pit.timer -= dt;
@@ -227,12 +233,14 @@ const RaceSim = (() => {
               const ty = c.pit.type;
               if (ty === 'four') c.tire = 1; else if (ty === 'two') c.tire = Math.min(1, (c.tire + 1) / 2 + 0.05);
               c.fuel = 1; if (c.damage > 0.05) c.damage *= 0.35;
+              if (c.pit.adj) c.adjB = Math.min(0.004, (c.adjB || 0) + 0.002);
+              c.lastStop = { t: this.t, time: c.pit.total, type: ty, adj: !!c.pit.adj };
               c.pit.phase = 'exit'; c.latT = g.pitLat;
               if (c.isPlayer) this.msg(this.tag(c) + 'PIT STOP DONE: ' + ({ four: '4 TIRES', two: '2 TIRES', fuel: 'FUEL' })[ty] + ' - GO GO GO!', 'player');
             }
           } else if (c.pit.phase === 'exit') {
             desired = pv;
-            if (prog > g.pitRange) { c.pit = null; c.latT = g.lanes[0]; }
+            if (prog > g.zones[c.pz || 0].range) { c.pit = null; c.latT = g.lanes[0]; }
           }
         } else if (c.status === 'fin') {
           desired = paceV * 0.9;
@@ -246,7 +254,7 @@ const RaceSim = (() => {
           desired = U.clamp(desired, 0, bv * 1.05);
           if (gp < 26) desired = Math.min(desired, paceV * 0.3);
         } else {
-          let f = 1 + (c.perf - 70) * 0.003 + c.form + md.spd + c.noise - (1 - c.tire) * T.tireFall - c.damage * 0.08;
+          let f = 1 + (c.perf - 70) * 0.003 + c.form + md.spd + c.noise - (1 - c.tire) * T.tireFall - c.damage * 0.08 + (c.adjB || 0);
           const laneIdx = g.lanes.indexOf(c.latT); if (laneIdx > 0 && T.outsidePen) f -= T.outsidePen * laneIdx;
           const dr = ahead(c, T.draftRange, 18);
           if (dr) f += T.draft * Math.pow(1 - dr.gp / T.draftRange, 0.7) * (0.8 + c.e.craft / 250);
@@ -296,7 +304,7 @@ const RaceSim = (() => {
         const ls = 60 * dt; const dl = c.latT - c.lat; const mv = U.clamp(dl, -ls, ls); c.lat += mv; c.yaw = U.clamp(mv / Math.max(dt, 1e-6) / 300, -0.35, 0.35);
         // pit entry
         if (c.pit && c.pit.phase === 'wait' && c.status === 'run') {
-          const p0 = g.pitProg(prevFrac), p1 = g.pitProg(fr);
+          const p0 = g.pitProg(prevFrac, c.pz), p1 = g.pitProg(fr, c.pz);
           if (p1 < p0 && p1 < 0.05) { c.pit.phase = 'lane'; c.latT = g.pitLat; if (c.isPlayer) this.msg(this.tag(c) + 'ON PIT ROAD', 'player'); }
         }
         // consumption
@@ -322,6 +330,9 @@ const RaceSim = (() => {
         // lap crossing
         const lapsNow = Math.max(0, Math.floor(c.d));
         if (lapsNow > c.laps && c.status === 'run') {
+          // v1.4 lap timing for the broadcast graphics (green-flag laps only)
+          if (c.lapStartT !== undefined && this.flag === 'green' && !c.pitLap && c.lapStartT >= (this.greenSince || 0) && lapsNow === c.laps + 1) { const lt = this.t - c.lapStartT; c.lastLap = lt; if (!this.fastLap || lt < this.fastLap.time) { this.fastLap = { id: c.id, time: lt, lap: lapsNow, t: this.t }; } }
+          c.lapStartT = this.t; c.pitLap = !!c.pit && c.pit.phase !== 'wait'; c.lapsSince = (c.lapsSince || 0) + 1;
           c.laps = lapsNow;
           c.noise = U.gauss() * 0.003 * (1.4 - c.e.cons / 100);
           if (this.phase === 'finishing' && c.status === 'run') { c.status = 'fin'; c.finishPos = this.finishOrder.length + 1; this.finishOrder.push(c); }
@@ -374,7 +385,7 @@ const RaceSim = (() => {
             if (!pitting || this.cautionTime < -this.lapTime * 2) {
               this.flag = 'green'; this.pace.active = false; this.restartT = this.lapTime * 0.6;
               this.cars.forEach(c => { if (c.pit && c.pit.phase === 'wait') c.pit = null; });
-              this.msg('GREEN FLAG - RESTART!', 'green'); this.onEvent('green', {});
+              this.msg('GREEN FLAG - RESTART!', 'green'); this.greenSince = this.t; this.onEvent('green', { restart: true });
             }
           }
         }
@@ -417,5 +428,5 @@ const RaceSim = (() => {
       return { order: all, stages: this.stageResults, cautions: this.cautions, track: this.geom.id };
     }
   }
-  return { Race, qualify, cautionChoice, MODES, CAR_LEN };
+  return { Race, qualify, cautionChoice, MODES, CAR_LEN, PIT_TIME };
 })();

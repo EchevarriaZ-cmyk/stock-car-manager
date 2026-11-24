@@ -36,12 +36,29 @@ const DATA = (() => {
     nxt: { double: [10] },
     indycar: { double: [10] },
   };
-  function formatText(si) {
-    const sr = SERIES[si]; const F = FORMATS[sr.id] || {};
-    if (F.cuts) return 'PLAYOFFS: TOP ' + F.cuts[0][1] + ' AFTER R' + F.cuts[0][0] + F.cuts.slice(1).map(c => c[1] === 4 ? ', CHAMPIONSHIP 4 AFTER R' + c[0] : ', CUT TO ' + c[1] + ' AFTER R' + c[0]).join('') + '. WIN A ROUND RACE = ADVANCE. BEST FINISH OF THE FINAL 4 IN R10 WINS IT ALL.';
-    if (F.double) return 'FULL-SEASON POINTS. THE FINALE PAYS DOUBLE POINTS.';
-    return 'FULL-SEASON POINTS - MOST POINTS AFTER 10 RACES WINS.';
+  // v1.4: the real full-season playoff formats ([after race N, drivers left] for a season of `n` races).
+  // Any other season length scales them, keeping each round at least one race long; 10 races keeps the v1.3 table.
+  const REAL_FMT = { cup: { n: 36, cuts: [[26, 16], [29, 12], [32, 8], [35, 4]] }, oreilly: { n: 33, cuts: [[26, 12], [29, 8], [32, 4]] }, truck: { n: 25, cuts: [[18, 10], [21, 8], [24, 4]] } };
+  function formatFor(si, n) {
+    const sr = SERIES[si]; n = n || 10; const F = FORMATS[sr.id] || {};
+    if (F.double) return { double: [n] };
+    if (!F.cuts) return {};
+    if (n === 10) return F;
+    const R = REAL_FMT[sr.id]; if (n === R.n) return { cuts: R.cuts.map(c => c.slice()) };
+    if (n < R.cuts.length + 2) return {}; // too short for playoffs: full-season points
+    const cuts = R.cuts.map(c => [Math.round(c[0] * n / R.n), c[1]]);
+    cuts[cuts.length - 1][0] = n - 1;
+    for (let i = cuts.length - 2; i >= 0; i--) cuts[i][0] = Math.max(1, Math.min(cuts[i][0], cuts[i + 1][0] - 1));
+    return { cuts };
   }
+  function formatText(si, n) {
+    n = n || 10; const F = formatFor(si, n);
+    if (F.cuts) return 'PLAYOFFS: TOP ' + F.cuts[0][1] + ' AFTER R' + F.cuts[0][0] + F.cuts.slice(1).map(c => c[1] === 4 ? ', CHAMPIONSHIP 4 AFTER R' + c[0] : ', CUT TO ' + c[1] + ' AFTER R' + c[0]).join('') + '. WIN A ROUND RACE = ADVANCE. BEST FINISH OF THE FINAL 4 IN R' + n + ' WINS IT ALL.';
+    if (F.double) return 'FULL-SEASON POINTS. THE FINALE PAYS DOUBLE POINTS.';
+    return 'FULL-SEASON POINTS - MOST POINTS AFTER ' + n + ' RACES WINS.';
+  }
+  // owner promotion rule: finish top `pos` in points, or win `wins` races (wins scale with the season length)
+  function promoRule(si, n) { const sr = SERIES[si]; n = n || 10; return { pos: sr.promoPos || 5, wins: Math.max(1, Math.round((sr.promoWins || 2) * n / 10)) }; }
   // points tables: NASCAR style (+ stage points) for stock cars, IndyCar style for open-wheel, club style for karts
   const POINTS_OW = [50, 40, 35, 32, 30, 28, 26, 24, 22, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 5, 5, 5, 5, 5, 5, 5];
   const POINTS_KART = [25, 20, 16, 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 1];
@@ -70,13 +87,13 @@ const DATA = (() => {
     charlotte: { name: 'CHARLOTTE MOTOR SPEEDWAY', short: 'CHARLOTTE', type: 'intermediate', miles: 1.5, bank: 24, city: 'Concord, NC', note: '1.5-MILE QUAD-OVAL',
       shape: RP([[520, 470, 500], [760, 410, 190], [760, 0, 190], [0, 0, 190], [0, 410, 190], [240, 470, 500]]) },
     lasvegas: { name: 'LAS VEGAS MOTOR SPEEDWAY', short: 'LAS VEGAS', type: 'intermediate', miles: 1.5, bank: 20, city: 'Las Vegas, NV', note: '1.5-MILE TRI-OVAL',
-      shape: RP([[800, 400, 190], [800, 0, 190], [0, 0, 190], [0, 400, 190], [400, 455, 1300]], { sf: 4 }) },
+      shape: RP([[800, 400, 190], [800, 0, 190], [0, 0, 190], [0, 400, 190], [400, 455, 1300]], { sf: 4, xs: 1.06 }) },
     kansas: { name: 'KANSAS SPEEDWAY', short: 'KANSAS', type: 'intermediate', miles: 1.5, bank: 20, city: 'Kansas City, KS', note: '1.5-MILE TRI-OVAL',
-      shape: RP([[760, 400, 200], [760, 0, 200], [0, 0, 200], [0, 400, 200], [380, 465, 1200]], { sf: 4 }) },
+      shape: RP([[760, 400, 200], [760, 0, 200], [0, 0, 200], [0, 400, 200], [380, 465, 1200]], { sf: 4, xs: 1.1 }) },
     texas: { name: 'TEXAS MOTOR SPEEDWAY', short: 'TEXAS', type: 'intermediate', miles: 1.5, bank: 24, city: 'Fort Worth, TX', note: '1.5-MILE QUAD-OVAL',
       shape: RP([[520, 460, 480], [800, 400, 210], [800, 0, 210], [0, 0, 150], [0, 400, 150], [260, 460, 480]]) },
     homestead: { name: 'HOMESTEAD-MIAMI SPEEDWAY', short: 'HOMESTEAD', type: 'intermediate', miles: 1.5, bank: 20, wear: 1.3, city: 'Homestead, FL', note: '1.5-MILE OVAL, WORN SURFACE',
-      shape: RP([[800, 420, 210], [800, 0, 210], [0, 0, 210], [0, 420, 210]]) },
+      shape: RP([[800, 420, 210], [800, 0, 210], [0, 0, 210], [0, 420, 210]], { xs: 1.1 }) },
     michigan: { name: 'MICHIGAN INTERNATIONAL SPEEDWAY', short: 'MICHIGAN', type: 'intermediate', miles: 2.0, bank: 18, city: 'Brooklyn, MI', note: '2-MILE D-OVAL',
       shape: RP([[1000, 440, 230], [1000, 0, 230], [0, 0, 230], [0, 440, 230], [500, 525, 2200]], { sf: 4 }) },
     pocono: { name: 'POCONO RACEWAY', short: 'POCONO', type: 'intermediate', miles: 2.5, bank: 14, city: 'Long Pond, PA', note: '2.5-MILE TRIANGLE, THREE DIFFERENT TURNS',
@@ -86,29 +103,48 @@ const DATA = (() => {
     indianapolis: { name: 'INDIANAPOLIS MOTOR SPEEDWAY', short: 'INDIANAPOLIS', type: 'intermediate', miles: 2.5, bank: 9, city: 'Indianapolis, IN', note: '2.5-MILE RECTANGLE, FOUR FLAT TURNS',
       shape: RP([[1000, 330, 110], [1000, 0, 110], [0, 0, 110], [0, 330, 110]]) },
     dover: { name: 'DOVER MOTOR SPEEDWAY', short: 'DOVER', type: 'short', miles: 1.0, bank: 24, wear: 1.1, city: 'Dover, DE', note: '1-MILE CONCRETE "MONSTER MILE"',
-      shape: RP([[560, 320, 160], [560, 0, 160], [0, 0, 160], [0, 320, 160]]) },
+      shape: RP([[560, 320, 160], [560, 0, 160], [0, 0, 160], [0, 320, 160]], { xs: 1.2 }) },
     phoenix: { name: 'PHOENIX RACEWAY', short: 'PHOENIX', type: 'short', miles: 1.0, bank: 11, city: 'Avondale, AZ', note: '1-MILE FLAT OVAL WITH THE DOGLEG',
       shape: RP([[600, 330, 130], [600, 40, 130], [0, 0, 170], [0, 360, 170], [160, 440, 300]]) },
     richmond: { name: 'RICHMOND RACEWAY', short: 'RICHMOND', type: 'short', miles: 0.75, bank: 14, city: 'Richmond, VA', note: '0.75-MILE D-SHAPED OVAL',
       shape: RP([[560, 320, 150], [560, 0, 150], [0, 0, 150], [0, 320, 150], [280, 385, 900]], { sf: 4 }) },
-    bristol: { name: 'BRISTOL MOTOR SPEEDWAY', short: 'BRISTOL', type: 'short', miles: 0.533, bank: 28, wear: 1.2, city: 'Bristol, TN', note: '0.533-MILE HIGH-BANKED CONCRETE',
-      shape: RP([[440, 260, 130], [440, 0, 130], [0, 0, 130], [0, 260, 130]]) },
-    martinsville: { name: 'MARTINSVILLE SPEEDWAY', short: 'MARTINSVILLE', type: 'short', miles: 0.526, bank: 12, wear: 1.1, city: 'Ridgeway, VA', note: '0.526-MILE PAPERCLIP',
+    bristol: { name: 'BRISTOL MOTOR SPEEDWAY', short: 'BRISTOL', type: 'short', splitPits: true, miles: 0.533, bank: 28, wear: 1.2, city: 'Bristol, TN', note: '0.533-MILE HIGH-BANKED CONCRETE',
+      shape: RP([[440, 260, 130], [440, 0, 130], [0, 0, 130], [0, 260, 130]], { xs: 1.3 }) },
+    martinsville: { name: 'MARTINSVILLE SPEEDWAY', short: 'MARTINSVILLE', type: 'short', splitPits: true, miles: 0.526, bank: 12, wear: 1.1, city: 'Ridgeway, VA', note: '0.526-MILE PAPERCLIP',
       shape: RP([[600, 200, 100], [600, 0, 100], [0, 0, 100], [0, 200, 100]]) },
     iowa: { name: 'IOWA SPEEDWAY', short: 'IOWA', type: 'short', miles: 0.875, bank: 14, city: 'Newton, IA', note: '0.875-MILE D-SHAPED OVAL',
       shape: RP([[620, 330, 160], [620, 0, 160], [0, 0, 160], [0, 330, 160], [310, 385, 1000]], { sf: 4 }) },
     elko: { name: 'ELKO SPEEDWAY', short: 'ELKO', type: 'short', miles: 0.375, bank: 9, city: 'Elko New Market, MN', note: '3/8-MILE OVAL',
-      shape: RP([[360, 240, 120], [360, 0, 120], [0, 0, 120], [0, 240, 120]]) },
+      shape: RP([[360, 240, 120], [360, 0, 120], [0, 0, 120], [0, 240, 120]], { xs: 1.2 }) },
     toledo: { name: 'TOLEDO SPEEDWAY', short: 'TOLEDO', type: 'short', miles: 0.5, bank: 6, city: 'Toledo, OH', note: 'HALF-MILE OVAL',
-      shape: RP([[380, 250, 125], [380, 0, 125], [0, 0, 125], [0, 250, 125]]) },
+      shape: RP([[380, 250, 125], [380, 0, 125], [0, 0, 125], [0, 250, 125]], { xs: 1.2 }) },
     berlin: { name: 'BERLIN RACEWAY', short: 'BERLIN', type: 'short', miles: 0.4375, bank: 8, city: 'Marne, MI', note: '7/16-MILE OVAL',
       shape: RP([[400, 220, 110], [400, 0, 110], [0, 0, 110], [0, 220, 110]]) },
     salem: { name: 'SALEM SPEEDWAY', short: 'SALEM', type: 'short', miles: 0.555, bank: 33, city: 'Salem, IN', note: 'HIGH-BANKED HALF-MILE',
-      shape: RP([[380, 270, 135], [380, 0, 135], [0, 0, 135], [0, 270, 135]]) },
+      shape: RP([[380, 270, 135], [380, 0, 135], [0, 0, 135], [0, 270, 135]], { xs: 1.3 }) },
     watkinsglen: { name: 'WATKINS GLEN INTERNATIONAL', short: 'WATKINS GLEN', type: 'road', miles: 2.45, bank: 0, city: 'Watkins Glen, NY', note: '2.45-MILE ROAD COURSE',
       shape: { kind: 'road', pts: [[0, 0], [520, 0], [660, -70], [700, -260], [780, -420], [920, -460], [1010, -360], [960, -210], [1060, -110], [1080, 50], [900, 160], [600, 190], [300, 200], [90, 150]] } },
     sonoma: { name: 'SONOMA RACEWAY', short: 'SONOMA', type: 'road', miles: 1.99, bank: 0, wear: 1.2, city: 'Sonoma, CA', note: '1.99-MILE HILLY ROAD COURSE',
       shape: { kind: 'road', pts: [[0, 0], [420, 0], [570, -80], [600, -260], [480, -360], [560, -490], [770, -470], [820, -320], [980, -300], [1010, -120], [860, -40], [820, 120], [600, 200], [300, 170], [110, 120]] } },
+    // ---------- v1.4: more real tracks for full-length seasons (layouts are rough pixel versions) ----------
+    nhms: { name: 'NEW HAMPSHIRE MOTOR SPEEDWAY', short: 'NEW HAMPSHIRE', type: 'short', miles: 1.058, bank: 7, city: 'Loudon, NH', note: '1.058-MILE FLAT "MAGIC MILE"',
+      shape: RP([[600, 300, 135], [600, 0, 135], [0, 0, 135], [0, 300, 135]]) },
+    rockingham: { name: 'ROCKINGHAM SPEEDWAY', short: 'ROCKINGHAM', type: 'short', miles: 1.017, bank: 25, wear: 1.4, city: 'Rockingham, NC', note: '1.017-MILE "ROCK", ROUGH SURFACE',
+      shape: RP([[590, 330, 165], [590, 20, 150], [0, 0, 160], [0, 330, 170]]) },
+    nwilkesboro: { name: 'NORTH WILKESBORO SPEEDWAY', short: 'N. WILKESBORO', type: 'short', miles: 0.625, bank: 14, wear: 1.4, city: 'North Wilkesboro, NC', note: '0.625-MILE OLD-SCHOOL OVAL',
+      shape: RP([[500, 250, 125], [500, 0, 125], [0, 0, 125], [0, 260, 125]]) },
+    cota: { name: 'CIRCUIT OF THE AMERICAS', short: 'COTA', type: 'road', miles: 2.4, bank: 0, wear: 1.1, city: 'Austin, TX', note: '2.4-MILE NATIONAL LAYOUT, BIG UPHILL TURN 1',
+      shape: { kind: 'road', pts: [[0, 0], [520, 0], [600, -110], [520, -200], [600, -300], [780, -330], [900, -260], [880, -120], [1000, -40], [940, 80], [700, 120], [420, 110], [200, 170], [40, 110]] } },
+    roval: { name: 'CHARLOTTE ROVAL', short: 'ROVAL', type: 'road', miles: 2.28, bank: 0, city: 'Concord, NC', note: '2.28-MILE ROAD COURSE IN AND AROUND THE OVAL',
+      shape: { kind: 'road', pts: [[0, 0], [560, 0], [760, -60], [820, -220], [700, -330], [520, -280], [420, -360], [260, -300], [300, -200], [120, -170], [-80, -260], [-180, -140], [-140, -30]] } },
+    chicago: { name: 'CHICAGO STREET COURSE', short: 'CHICAGO', type: 'road', street: true, miles: 2.2, bank: 0, city: 'Chicago, IL', note: '2.2-MILE GRANT PARK STREET COURSE',
+      shape: { kind: 'road', pts: [[0, 0], [640, 0], [700, -60], [700, -200], [600, -240], [600, -380], [420, -380], [380, -300], [200, -300], [160, -200], [-40, -200], [-80, -100]] } },
+    mexico: { name: 'AUTODROMO HERMANOS RODRIGUEZ', short: 'MEXICO CITY', type: 'road', miles: 2.42, bank: 0, city: 'Mexico City, MX', note: '2.42-MILE CIRCUIT THROUGH THE STADIUM',
+      shape: { kind: 'road', pts: [[0, 0], [900, 0], [980, -70], [900, -150], [760, -160], [640, -240], [440, -220], [360, -300], [180, -280], [60, -200], [-40, -220], [-120, -120]] } },
+    limerock: { name: 'LIME ROCK PARK', short: 'LIME ROCK', type: 'road', miles: 1.53, bank: 0, city: 'Lakeville, CT', note: '1.53-MILE SHORT, FAST ROAD COURSE',
+      shape: { kind: 'road', pts: [[0, 0], [520, 0], [660, -60], [640, -200], [500, -240], [380, -200], [200, -260], [40, -220], [-60, -120]] } },
+    thermal: { name: 'THE THERMAL CLUB', short: 'THERMAL', type: 'road', miles: 3.067, bank: 0, city: 'Thermal, CA', note: '3.07-MILE DESERT CLUB CIRCUIT',
+      shape: { kind: 'road', pts: [[0, 0], [700, 0], [820, -80], [760, -200], [880, -320], [760, -440], [560, -400], [480, -300], [300, -360], [120, -300], [160, -180], [0, -120], [-100, -60]] } },
     // ---------- v1.3: real US kart tracks (layouts simplified, lengths approximate) ----------
     orlandokart: { name: 'ORLANDO KART CENTER', short: 'ORLANDO KART', type: 'road', kart: true, miles: 0.75, bank: 0, city: 'Orlando, FL', note: 'TWISTY CLUB LAYOUT, HOME OF FLORIDA KARTING',
       shape: { kind: 'road', pts: [[0, 0], [300, 0], [420, 30], [440, 130], [340, 170], [250, 230], [300, 310], [470, 300], [560, 200], [620, 40], [720, 40], [740, 220], [660, 400], [380, 430], [120, 400], [-40, 330], [-60, 160]] } },
@@ -146,7 +182,7 @@ const DATA = (() => {
     laguna: { name: 'LAGUNA SECA RACEWAY', short: 'LAGUNA SECA', type: 'road', miles: 2.238, bank: 0, city: 'Monterey, CA', note: '2.24-MILE ROAD COURSE WITH THE CORKSCREW',
       shape: { kind: 'road', pts: [[0, 0], [380, 0], [500, -60], [620, -40], [700, -160], [640, -300], [480, -340], [420, -440], [520, -520], [380, -580], [200, -500], [140, -360], [20, -260], [-80, -120]] } },
     lucasoil: { name: 'LUCAS OIL INDIANAPOLIS RACEWAY PARK', short: 'LUCAS OIL', type: 'short', miles: 0.686, bank: 12, city: 'Brownsburg, IN', note: '0.686-MILE OVAL',
-      shape: RP([[440, 270, 135], [440, 0, 135], [0, 0, 135], [0, 270, 135]]) },
+      shape: RP([[440, 270, 135], [440, 0, 135], [0, 0, 135], [0, 270, 135]], { xs: 1.2 }) },
     gateway: { name: 'WORLD WIDE TECHNOLOGY RACEWAY', short: 'GATEWAY', type: 'intermediate', miles: 1.25, bank: 11, city: 'Madison, IL', note: '1.25-MILE EGG-SHAPED OVAL',
       shape: RP([[700, 360, 140], [700, 60, 140], [0, 0, 210], [0, 400, 210]]) },
     milwaukee: { name: 'THE MILWAUKEE MILE', short: 'MILWAUKEE', type: 'short', miles: 1.0, bank: 9, city: 'West Allis, WI', note: '1-MILE FLAT OVAL',
@@ -163,11 +199,16 @@ const DATA = (() => {
     darlington: [FS(0.15, 72), [0.4, 0.6, 36]], indianapolis: [FS(0.12, 84), [0.13, 0.22, 52], [0.78, 0.87, 52]], dover: [FS(0.16, 76), [0.37, 0.63, 54]],
     phoenix: [FS(0.12, 70)], richmond: [FS(0.17, 70), [0.37, 0.63, 38]], bristol: [[0, 1, 66]], martinsville: [FS(0.2, 64), [0.32, 0.68, 46]],
     iowa: [FS(0.15, 62), [0.36, 0.64, 30]], elko: [FS(0.14, 40)], toledo: [FS(0.14, 40)], berlin: [FS(0.14, 40)], salem: [FS(0.15, 44)],
-    lucasoil: [FS(0.15, 44)], gateway: [FS(0.12, 58)], nashville: [FS(0.14, 66)], milwaukee: [FS(0.14, 58)],
+    lucasoil: [FS(0.15, 44)], nhms: [FS(0.15, 66), [0.38, 0.62, 30]], rockingham: [FS(0.14, 56)], nwilkesboro: [FS(0.16, 52), [0.4, 0.6, 30]],
+    cota: [FS(0.05, 56)], roval: [FS(0.06, 70)], chicago: [FS(0.06, 50)], mexico: [FS(0.05, 70)], limerock: [FS(0.04, 36)], thermal: [FS(0.04, 30)], gateway: [FS(0.12, 58)], nashville: [FS(0.14, 66)], milwaukee: [FS(0.14, 58)],
     watkinsglen: [FS(0.05, 54)], sonoma: [FS(0.05, 44)], roadamerica: [FS(0.04, 50)], indyroad: [FS(0.05, 80)], longbeach: [FS(0.06, 60)], stpete: [FS(0.06, 56)],
   };
   // infield lakes (Daytona's Lake Lloyd, Talladega's infield lake): [share of a lap, inward offset]
   const LAKES = { daytona: [0.5, 190], talladega: [0.55, 170] };
+  // v1.4 venue pieces: press box over the start/finish (true = on top of the main stand, 'inside' = infield like Indy's
+  // Pagoda), the scoring pylon [share of a lap, lateral] in the infield, Bristol's center-hung video board
+  const VENUE = { bristol: { board: true }, indianapolis: { press: 'inside', pylon: [-0.045] }, daytona: { pylon: [0.035] }, talladega: { pylon: [0.035] } };
+  function venue(tid) { const d = TRACKS[tid]; const v = VENUE[tid] || {}; return { press: v.press !== undefined ? v.press : !d.kart, pylon: v.pylon !== undefined ? v.pylon : (!d.kart && !v.board ? [0.02] : null), board: !!v.board }; }
   function standsFor(tid) { const d = TRACKS[tid]; return STANDS[tid] || (d.kart ? [FS(0.04, 30)] : d.type === 'road' ? [FS(0.05, 50)] : [FS(0.11, 72)]); }
   // 10-race schedules of tracks each series really runs. ARCA & Cup open at Daytona; Cup ends at Phoenix.
   const CALENDARS = [
@@ -183,9 +224,47 @@ const DATA = (() => {
     ['stpete', 'barber', 'indyroad', 'detroit', 'roadamerica', 'midohio', 'iowa', 'laguna', 'portland', 'milwaukee'],
     ['stpete', 'longbeach', 'barber', 'indyroad', 'indianapolis', 'detroit', 'roadamerica', 'toronto', 'milwaukee', 'nashville'],
   ];
-  // showpiece race names
-  const EVENTS = { '3:1': 'DAYTONA 500', '3:8': 'SOUTHERN 500', '3:10': 'CHAMPIONSHIP RACE', '4:10': 'KART SERIES FINALE', '8:10': 'INDY NXT FINALE', '9:2': 'GRAND PRIX OF LONG BEACH', '9:5': 'INDY 500', '9:10': 'INDYCAR SEASON FINALE' };
-  function eventName(seriesIdx, week) { return EVENTS[seriesIdx + ':' + week] || null; }
+  // v1.4: full seasons in the real order (based on the 2025 calendars, using the tracks in the game; doubleheaders count twice).
+  const FULL_CAL = [
+    ['daytona', 'phoenix', 'talladega', 'kansas', 'charlotte', 'michigan', 'midohio', 'pocono', 'berlin', 'elko', 'dover', 'lucasoil', 'iowa', 'watkinsglen', 'milwaukee', 'bristol', 'salem', 'toledo', 'nhms', 'kansas'],
+    ['daytona', 'atlanta', 'lasvegas', 'homestead', 'martinsville', 'rockingham', 'bristol', 'texas', 'kansas', 'nwilkesboro', 'charlotte', 'nashville', 'michigan', 'pocono', 'limerock', 'lucasoil', 'richmond', 'watkinsglen',
+      'darlington', 'bristol', 'nhms', 'roval', 'talladega', 'martinsville', 'phoenix'],
+    ['daytona', 'atlanta', 'cota', 'phoenix', 'lasvegas', 'homestead', 'martinsville', 'darlington', 'bristol', 'rockingham', 'talladega', 'texas', 'charlotte', 'nashville', 'portland', 'mexico', 'pocono', 'atlanta',
+      'chicago', 'sonoma', 'dover', 'indianapolis', 'iowa', 'watkinsglen', 'daytona', 'darlington', 'bristol', 'kansas', 'roval', 'lasvegas', 'talladega', 'martinsville', 'phoenix'],
+    ['daytona', 'atlanta', 'cota', 'phoenix', 'lasvegas', 'homestead', 'martinsville', 'darlington', 'bristol', 'talladega', 'texas', 'kansas', 'charlotte', 'nashville', 'michigan', 'mexico', 'pocono', 'atlanta',
+      'chicago', 'sonoma', 'dover', 'indianapolis', 'iowa', 'watkinsglen', 'richmond', 'daytona', 'darlington', 'gateway', 'bristol', 'nhms', 'kansas', 'roval', 'lasvegas', 'talladega', 'martinsville', 'phoenix'],
+    ['orlandokart', 'ocalagp', 'gopro', 'cmskart', 'newcastle', 'pittrace', 'orlandokart', 'ocalagp', 'gopro', 'newcastle', 'cmskart', 'orlandokart'],
+    ['nola', 'nola', 'barber', 'barber', 'indyroad', 'roadamerica', 'roadamerica', 'lucasoil', 'midohio', 'midohio', 'watkinsglen', 'portland', 'portland', 'sonoma', 'laguna', 'laguna'],
+    ['stpete', 'stpete', 'nola', 'nola', 'barber', 'barber', 'indyroad', 'indyroad', 'roadamerica', 'roadamerica', 'lucasoil', 'midohio', 'midohio', 'toronto', 'toronto', 'portland', 'portland', 'laguna'],
+    ['stpete', 'stpete', 'barber', 'barber', 'indyroad', 'indyroad', 'lucasoil', 'roadamerica', 'roadamerica', 'midohio', 'midohio', 'toronto', 'toronto', 'detroit', 'portland', 'portland', 'laguna', 'laguna'],
+    ['stpete', 'barber', 'indyroad', 'indyroad', 'detroit', 'roadamerica', 'midohio', 'iowa', 'toronto', 'laguna', 'portland', 'milwaukee', 'gateway', 'nashville'],
+    ['stpete', 'thermal', 'longbeach', 'barber', 'indyroad', 'indianapolis', 'detroit', 'gateway', 'roadamerica', 'midohio', 'iowa', 'iowa', 'toronto', 'laguna', 'portland', 'milwaukee', 'nashville'],
+  ];
+  // season lengths you can pick: 0 = full (the real number of races for that series)
+  const SEASON_LENS = [6, 10, 16, 0];
+  const seasonLenName = (len, si) => len ? String(len) : 'FULL' + (si !== undefined ? ' (' + FULL_CAL[si].length + ')' : '');
+  function seasonRaces(si, len) { return len === 10 ? 10 : !len ? FULL_CAL[si].length : Math.min(len, FULL_CAL[si].length); }
+  // pick `len` races from the real calendar, spread over the season in real order: always the opener and the finale
+  // (and the Indy 500 for IndyCar). 10 races keeps the hand-made v1.2/v1.3 calendars, so old saves feel the same.
+  function scheduleFor(si, len) {
+    if (len === 10 || len === undefined || len === null) return CALENDARS[si].slice();
+    const full = FULL_CAL[si]; const n = seasonRaces(si, len); if (n >= full.length) return full.slice();
+    const pick = []; for (let k = 0; k < n; k++) pick.push(Math.round(k * (full.length - 1) / (n - 1)));
+    const must = si === 9 ? [full.indexOf('indianapolis')] : [];
+    for (const m of must) if (m >= 0 && !pick.includes(m)) { let bi = 1; for (let k = 1; k < n - 1; k++) if (Math.abs(pick[k] - m) < Math.abs(pick[bi] - m)) bi = k; pick[bi] = m; }
+    pick.sort((a, b) => a - b);
+    return pick.map(i => full[i]);
+  }
+  // showpiece race names (found by track, so they follow the schedule whatever its length)
+  function eventName(seriesIdx, week, sched) {
+    if (!sched) { const G = typeof Game !== 'undefined' && Game.S; sched = G && G.seriesIdx === seriesIdx && G.schedule && G.schedule.length ? G.schedule : CALENDARS[seriesIdx]; }
+    const tid = sched[week - 1]; if (!tid) return null; const last = sched.length > 1 && week === sched.length;
+    if (seriesIdx === 3) { if (week === 1 && tid === 'daytona') return 'DAYTONA 500'; if (last) return 'CHAMPIONSHIP RACE'; if (tid === 'darlington' && sched.lastIndexOf('darlington') === week - 1) return 'SOUTHERN 500'; }
+    if (seriesIdx === 9) { if (tid === 'indianapolis') return 'INDY 500'; if (tid === 'longbeach') return 'GRAND PRIX OF LONG BEACH'; if (last) return 'INDYCAR SEASON FINALE'; }
+    if (last && seriesIdx === 4) return 'KART SERIES FINALE';
+    if (last && seriesIdx === 8) return 'INDY NXT FINALE';
+    return null;
+  }
   // pre-v1.2 made-up tracks -> closest real track (save migration)
   const OLD_TRACKS = { thunder: 'bristol', paperclip: 'martinsville', hickory: 'richmond', riverbend: 'iowa', lonestar: 'texas', carolina: 'charlotte', desert: 'lasvegas',
     heartland: 'kansas', bayshore: 'daytona', tallapines: 'talladega', blueridge: 'watkinsglen', lakeside: 'sonoma' };
@@ -215,7 +294,7 @@ const DATA = (() => {
   }
   // v1.3: race settings for a series at a track (open-wheel cars: no stages, quicker laps, less draft; karts: club sprints)
   function raceT(tid, si) {
-    const base = trackT(tid); if (si === undefined || si === null) return base;
+    const base = trackT(tid); if (si === undefined || si === null) return applyLen(Object.assign({}, base));
     const sr = SERIES[si]; const t = Object.assign({}, base);
     if (sr.ow) {
       t.stages = []; t.lapTime = +(base.lapTime * 0.92).toFixed(2); t.draft = base.draft * 0.6; t.fuelLaps = Math.round(base.fuelLaps * 1.1);
@@ -223,7 +302,16 @@ const DATA = (() => {
       if (tid === 'indianapolis' && si === 9) t.laps = 70; // the Indy 500 runs long
     }
     if (sr.kart && !TRACKS[tid].kart) { t.stages = []; t.laps = Math.min(base.laps, 30); }
-    return t;
+    return applyLen(t);
+  }
+  // v1.4 race length setting (SETTINGS.raceMult): more or fewer laps; stages keep their share of the race, and the fuel
+  // window and tire wear scale with sqrt-ish of the length so a sprint still has a stop or two and a long race has more.
+  function applyLen(t, mult) {
+    const m = mult || (typeof SETTINGS !== 'undefined' ? SETTINGS.raceMult() : 1); if (m === 1) return t;
+    const laps0 = t.laps; t.laps = Math.max(t.laps <= 30 ? 6 : 10, Math.round(laps0 * m)); const k = t.laps / laps0;
+    if (t.stages && t.stages.length) { const st = []; for (const x of t.stages) { const v = Math.round(x * k); if (v >= 2 && v < t.laps - 2 && (!st.length || v > st[st.length - 1] + 1)) st.push(v); } t.stages = st; }
+    const f = Math.pow(k, 0.6); t.fuelLaps = Math.max(4, Math.round(t.fuelLaps * f)); t.wear = t.wear / f;
+    t.lenMult = m; return t;
   }
   const typeName = (tid, si) => raceT(tid, si).name;
   const bankWord = b => b === 0 ? 'ROAD COURSE' : b >= 24 ? 'HIGH BANKS' : b <= 12 ? 'FLAT' : 'MEDIUM BANKS';
@@ -340,7 +428,7 @@ const DATA = (() => {
   const POINTS = [40, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
   const XP_PER_LEVEL = 120;
   // ---------- v1.1 ----------
-  const VERSION = '1.3';
+  const VERSION = '1.4';
   // Driver stats shown on cards (aggression is a style: more passes, more wrecks)
   const DRIVER_STATS = [
     ['speed', 'SPEED', 'RAW PACE. THE BIGGEST PART OF LAP TIME.'],
@@ -383,7 +471,7 @@ const DATA = (() => {
     ['million', 'MILLIONAIRE', 'star', 'gold', 'HAVE $1,000,000 IN THE BANK.'],
   ];
   const CUP_TROPHIES = [
-    ['playoff', 'PLAYOFF BERTH', 'medal', 'silver', 'MAKE THE CUP PLAYOFFS (TOP 16 AFTER RACE 4).'],
+    ['playoff', 'PLAYOFF BERTH', 'medal', 'silver', 'MAKE THE CUP PLAYOFFS.'],
     ['round8', 'ROUND OF 8', 'medal', 'silver', 'SURVIVE TO THE CUP ROUND OF 8.'],
     ['champ4', 'CHAMPIONSHIP 4', 'medal', 'gold', 'REACH THE CUP CHAMPIONSHIP 4 FINALE.'],
     ['cupChamp', 'CUP CHAMPION', 'big', 'gold', 'WIN THE CUP SERIES CHAMPIONSHIP.'],
@@ -391,10 +479,21 @@ const DATA = (() => {
   // v1.3: open-wheel and karting trophies
   const INDY_TROPHIES = [
     ['kartChamp', 'KART CHAMPION', 'cup', 'bronze', 'WIN THE REGIONAL KART SERIES CHAMPIONSHIP.'],
-    ['indy500', 'INDY 500 WINNER', 'big', 'gold', 'WIN THE INDY 500 (INDYCAR, RACE 5).'],
+    ['indy500', 'INDY 500 WINNER', 'big', 'gold', 'WIN THE INDY 500 (INDYCAR).'],
     ['indyChamp', 'INDYCAR CHAMPION', 'big', 'gold', 'WIN THE INDYCAR SERIES CHAMPIONSHIP.'],
   ];
   const CHANGELOG = [
+    { v: '1.4', date: 'NOV 24, 2026', title: 'RACE DAY', items: [
+      'NEW RACE SCREEN: THE TRACK NOW FILLS THE WHOLE SCREEN, WITH SLIM SEE-THROUGH TV GRAPHICS ON TOP. A THIN TOP BAR (FLAG, LAP X/Y, STAGE), A LEADERBOARD ON THE LEFT (POSITION, TEAM COLORS, CAR NUMBER, 3-LETTER NAME, INTERVAL, UP/DOWN ARROWS, PIT TAGS - YOUR CAR SAYS YOU) THAT HIDES WITH A TAP, AND A SMALL PIT-WALL STRIP ON THE RIGHT.',
+      'TV GRAPHICS: A START GRAPHIC WITH STARTING LIGHTS, GREEN FLAG / RESTART / WHITE FLAG / STAGE SPLASHES, A CAUTION BANNER THAT SLAMS IN AND THEN SHRINKS TO A STRIP, "CAUTION - FIELD FROZEN" ON THE LEADERBOARD, A LIVE PIT-STOP TIMER, BATTLE FOR THE LEAD, FASTEST LAP, AND A WAVING CHECKERED FLAG AT THE FINISH.',
+      'PIT WALL: PUSH / NORM / SAVE, PIT NOW, 4 TIRE GAUGES, A FUEL GAUGE AND YOUR GAP TO THE CARS AHEAD AND BEHIND. PIT CALLS (4 TIRES, 2 TIRES, FUEL ONLY, STAY OUT) SHOW RIGHT IN THE STRIP WITH THE STOP TIME, PLUS A NEW CHASSIS ADJUSTMENT (A LONGER STOP, A SLIGHTLY BETTER CAR AFTER).',
+      'REAL-LOOKING PIT ROADS: PIT BOXES NOW SIT ON THE FRONTSTRETCH ONLY (BRISTOL AND MARTINSVILLE SPLIT THEM BETWEEN THE FRONT AND BACK STRAIGHTS, LIKE THE REAL ONES). ENTRY AND EXIT LANES, A PIT WALL WITH CREW CARTS, AN INSIDE WALL LINE AND MARKED BOXES. CARS SHRINK TO FIT THEIR BOX ON PIT ROAD. SOME SHORT OVALS GOT LONGER STRAIGHTS.',
+      'REAL-LOOKING GRANDSTANDS: TIERED SEATS WITH CONCOURSES, STAIRS AND A PACKED CROWD, SUITES AND A PRESS BOX OVER THE START/FINISH, A SCORING PYLON IN THE INFIELD, INDY\'S PAGODA AND BRISTOL\'S CENTER-HUNG VIDEO BOARD.',
+      'RACE LENGTH SETTING: SPRINT, SHORT, STANDARD OR LONG (SETTINGS - THE GEAR ON THE HUB). LAPS, STAGES, FUEL AND TIRE WEAR SCALE SO STOPS STILL MAKE SENSE. WORKS IN CAREERS AND FREE MODE, FROM THE NEXT RACE.',
+      'SEASON LENGTH: PICK 6, 10, 16 OR THE FULL REAL SEASON WHEN YOU START A CAREER, AND CHANGE IT BETWEEN SEASONS. REAL TRACKS IN THE REAL ORDER (FULL CUP SEASON: 36 RACES). PLAYOFFS AND MOVE-UP RULES SCALE WITH IT. NEW TRACKS: NEW HAMPSHIRE, ROCKINGHAM, NORTH WILKESBORO, COTA, THE CHARLOTTE ROVAL, CHICAGO STREETS, MEXICO CITY, LIME ROCK AND THERMAL.',
+      'TUTORIAL: A SHORT, SKIPPABLE TOUR WITH A PRACTICE TEAM (YOUR SAVE IS SAFE). OFFERED ON FIRST LAUNCH, REPLAY IT FROM SETTINGS OR PROFILE.',
+      'OLD SAVES (V1.0 TO V1.3) STILL LOAD AND KEEP 10-RACE SEASONS.',
+    ] },
     { v: '1.3', date: 'NOV 23, 2026', title: 'TWO ROADS', items: [
       'NEW CAREERS START IN KARTING: A CHEAP KART TEAM IN A REGIONAL KART SERIES AT REAL US KART TRACKS - ORLANDO KART CENTER, OCALA GRAN PRIX, GOPRO MOTORPLEX, NEW CASTLE MOTORSPORTS PARK, THE CHARLOTTE MOTOR SPEEDWAY KART TRACK AND PITTRACE - WITH KART ART. YOU ARE STILL THE OWNER / MANAGER, NEVER THE DRIVER.',
       'PICK YOUR PATH AFTER THE KART SEASON: NASCAR (ARCA > TRUCKS > O\'REILLY > CUP) OR THE ROAD TO INDYCAR (USF JUNIORS > USF2000 > USF PRO 2000 > INDY NXT > INDYCAR) WITH OPEN-WHEEL CARS AND REAL-STYLE SCHEDULES: ST. PETE, LONG BEACH, BARBER, THE INDY ROAD COURSE, THE INDY 500, DETROIT, ROAD AMERICA, MID-OHIO, LAGUNA SECA, IOWA, GATEWAY, TORONTO, PORTLAND, MILWAUKEE AND NASHVILLE.',
@@ -447,7 +546,7 @@ const DATA = (() => {
       'AUTOSAVE PLUS EXPORT / IMPORT SAVE CODES.',
     ] },
   ];
-  return { standsFor, LAKES, USED_KARTS, USED_OW, usedLot, TEAM_EVENTS, nameOk, LADDERS, PATHS, FORMATS, formatText, POINTS_OW, POINTS_KART, FAC_MAX, RND_TIERS, INDY_TROPHIES, raceT, typeName,
+  return { venue, FULL_CAL, SEASON_LENS, seasonLenName, seasonRaces, scheduleFor, formatFor, promoRule, applyLen, REAL_FMT, standsFor, LAKES, USED_KARTS, USED_OW, usedLot, TEAM_EVENTS, nameOk, LADDERS, PATHS, FORMATS, formatText, POINTS_OW, POINTS_KART, FAC_MAX, RND_TIERS, INDY_TROPHIES, raceT, typeName,
     USED_CARS, LOCAL_SPONSORS, SERIES, TYPES, TRACKS, CALENDARS, FIRST, LAST, TEAM_A, TEAM_B, SPONSORS, BODY_COLORS, PARTS, PART_W, FACILITIES, FAC_COST, POINTS, XP_PER_LEVEL,
     VERSION, DRIVER_STATS, DEV_MAX, CAR2, SCOUTS, FEEDERS, CHANGELOG, MILESTONES, CUP_TROPHIES, OLD_TRACKS, OLD_SHORT, trackT, bankWord, eventName };
 })();

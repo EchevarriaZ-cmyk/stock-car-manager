@@ -7,7 +7,7 @@ class TrackGeom {
     const sh = def.shape;
     let pts = [];
     if (sh.kind === 'oval' || sh.kind === 'trioval') pts = this._oval(sh.straight, sh.r, sh.kind === 'trioval' ? sh.bump : 0);
-    else if (sh.kind === 'rp') pts = this._rpoly(sh.v, sh.sf);
+    else if (sh.kind === 'rp') pts = this._rpoly(sh.xs ? sh.v.map(([x, y, r]) => [x * sh.xs, y, r]) : sh.v, sh.sf); // v1.4: xs lengthens the straights
     else pts = this._road(sh.pts);
     // v1.2: scale every layout to its real lap length (compressed so short tracks still fit the screen)
     if (def.miles) { const target = this.T.perim; let per = 0; for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; per += Math.hypot(b[0] - a[0], b[1] - a[1]); } const k = target / per; pts = pts.map(([x, y]) => [x * k, y * k]); }
@@ -16,33 +16,41 @@ class TrackGeom {
     if (this.type === 'superspeedway') { this.hw = 46; this.lanes = [-24, 0, 24]; }
     else if (this.type === 'road') { this.hw = 30; this.lanes = [-10, 10]; }
     else { this.hw = 36; this.lanes = [-14, 12]; }
-    // v1.3 pit road: entry off the track before the start/finish (commitment line), a row of evenly spaced
-    // pit boxes (one per car, pole gets the box nearest the exit), and the exit merging back in turn 1/2.
-    this.pitLat = -(this.hw + 32); this.boxLat = -(this.hw + 51);
+    // Pit road. v1.4 ovals: the pit boxes sit on the frontstretch only, like the real intermediates and superspeedways
+    // (Bristol and Martinsville split them between the front and back straights, like the real ones). The entry lane
+    // leaves the apron in turn 3-4, the exit lane rejoins in turn 1-2, and boxes never run into the turns.
+    this.pitLat = -(this.hw + 31); this.boxLat = -(this.hw + 51);
     const nCars = seriesIdx !== undefined && seriesIdx !== null && DATA.SERIES[seriesIdx] ? DATA.SERIES[seriesIdx].cars : 32; this.nBoxes = nCars;
-    const L = this.L;
-    let zone, entry, exit;
+    const L = this.L; const ds = L / this.M; this.zones = [];
     if (this.type !== 'road' && sh.kind === 'rp') {
-      // ovals: a long pit road; on short tracks it wraps into the turns (like Bristol and Martinsville)
-      // boxes are ~1.25 car lengths apart so stopped cars have room; that needs more pit road than a squeezed
-      // game track has frontstretch, so on most ovals the box row also runs into turns 1-2 and 3-4
-      entry = Math.max(70, 0.032 * L); exit = Math.max(100, 0.06 * L); zone = nCars * 40;
-      const max = 0.66 * L; if (zone + entry + exit > max) zone = max - entry - exit;
-      this.boxAt = 0.45; // share of the boxes before the start/finish line
+      const runs = this._straightRuns(); const M = this.M;
+      const front = runs.find(r => r.has0) || { a: M - 10, len: 20 };
+      const entry = Math.max(60, 0.035 * L), exit = Math.max(80, 0.05 * L);
+      const zone = (a, len, n) => {
+        const row = len * ds * 0.94, rowStart = (a + len * 0.03) * ds; // a little straight left at each end for the lanes to swing in
+        const z = { n, start: (((rowStart - entry) / L) % 1 + 1) % 1, boxA: entry / L, boxB: (entry + row) / L };
+        z.range = z.boxB + exit / L; z.boxLen = row / n; return z;
+      };
+      if (def.splitPits && runs.length > 1) {
+        const back = runs.filter(r => r !== front).sort((x, y) => y.len - x.len)[0];
+        const n0 = Math.ceil(nCars / 2); this.zones.push(zone(front.a, front.len, n0), zone(back.a, back.len, nCars - n0));
+      } else this.zones.push(zone(front.a, front.len, nCars));
     } else {
-      let halfStraight;
+      let halfStraight, zone, entry, exit;
       if (sh.kind === 'rp' || (sh.kind === 'road' && def.miles)) halfStraight = this._straightHalf(sh.kind === 'road' ? 0.35 : 0.3);
       else halfStraight = sh.kind === 'road' ? Math.hypot(sh.pts[1][0] - sh.pts[0][0], sh.pts[1][1] - sh.pts[0][1]) * 0.45 : sh.straight / 2 * 0.95;
       if (def.kart) { zone = Math.min(0.17 * L, nCars * 18); entry = 26; exit = 30; } // karts: a pit / grid lane along the main straight
       else { zone = Math.min(0.22 * L, Math.max(halfStraight * 1.6, nCars * 22)); entry = Math.max(40, halfStraight * 0.2); exit = Math.max(50, halfStraight * 0.25); }
-      this.boxAt = 0.5;
+      const z = { n: nCars, start: 1 - (zone * 0.5 + entry) / L, boxA: entry / L, boxB: (entry + zone) / L }; z.range = (zone + entry + exit) / L; z.boxLen = zone / nCars;
+      this.zones.push(z);
     }
-    this.pitStart = 1 - (zone * this.boxAt + entry) / L; this.pitEnd = (zone * (1 - this.boxAt) + exit) / L; this.pitRange = (zone + entry + exit) / L;
-    this.boxA = entry / L; this.boxB = (entry + zone) / L; this.boxLen = zone / nCars;
+    // zone 0 also under the v1.3 names (renderer, tests)
+    const z0 = this.zones[0];
+    this.pitStart = z0.start; this.pitRange = z0.range; this.pitEnd = (z0.start + z0.range) % 1; this.boxA = z0.boxA; this.boxB = z0.boxB; this.boxLen = z0.boxLen;
     // bbox with margins
     let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
     for (let i = 0; i < this.M; i++) { minX = Math.min(minX, this.X[i]); maxX = Math.max(maxX, this.X[i]); minY = Math.min(minY, this.Y[i]); maxY = Math.max(maxY, this.Y[i]); }
-    const m = this.hw + 122;
+    const maxDep = Math.max(0, ...DATA.standsFor(trackId).map(x => x[2])); const m = this.hw + Math.max(122, 16 + maxDep + 34); // room for the stands + press box
     this.ox = -minX + m; this.oy = -minY + m;
     for (let i = 0; i < this.M; i++) { this.X[i] += this.ox; this.Y[i] += this.oy; }
     this.W = Math.ceil(maxX - minX + m * 2); this.H = Math.ceil(maxY - minY + m * 2);
@@ -135,8 +143,20 @@ class TrackGeom {
     const rx = -Math.sin(a), ry = Math.cos(a);
     return { x: x + rx * (lat || 0), y: y + ry * (lat || 0), a };
   }
-  inPitZone(frac) { const p = ((frac - this.pitStart) % 1 + 1) % 1; return p <= this.pitRange; }
-  pitProg(frac) { return ((frac - this.pitStart) % 1 + 1) % 1; }
-  // pit-progress where box k (0 = nearest the entry) is; st = 0..1 share of the box row
-  boxProg(st) { return this.boxA + (this.boxB - this.boxA) * U.clamp(st, 0, 1); }
+  inPitZone(frac) { return this.zones.some((z, i) => this.pitProg(frac, i) <= z.range); }
+  pitProg(frac, zi) { const z = this.zones[zi || 0]; return ((frac - z.start) % 1 + 1) % 1; }
+  // pit-progress where a box is; st = 0..1 share of the box row (1 = nearest the exit)
+  boxProg(st, zi) { const z = this.zones[zi || 0]; return z.boxA + (z.boxB - z.boxA) * U.clamp(st, 0, 1); }
+  // v1.4: the low-curvature stretches of an oval (frontstretch = the one through the start/finish line), as
+  // {a: first sample index (may be negative = before the line), len: samples, has0}
+  _straightRuns() {
+    const M = this.M, ds = this.L / M, w = 5, thr = this.L / (2 * Math.PI) * 0.9;
+    const straight = new Uint8Array(M);
+    for (let i = 0; i < M; i++) { let d = this.A[(i + w) % M] - this.A[(i - w + M) % M]; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; straight[i] = Math.abs(d) < 1e-6 || (2 * w * ds) / Math.abs(d) > thr ? 1 : 0; }
+    let s0 = 0; while (s0 < M && straight[s0]) s0++; if (s0 === M) return [{ a: -M / 4, len: M / 2, has0: true }];
+    const runs = []; let i = s0;
+    for (let k = 0; k < M; k++) { const j = (s0 + k) % M; if (straight[j] && !straight[(j - 1 + M) % M]) { let n = 0; while (n < M && straight[(j + n) % M]) n++; let a = j; if (a + n > M) a -= M; runs.push({ a, len: n, has0: a <= 0 && a + n > 0 || a <= M && a + n > M }); } }
+    void i; for (const r of runs) if (r.a > M / 2 && r.has0) r.a -= M;
+    return runs;
+  }
 }

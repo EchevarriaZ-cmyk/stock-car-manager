@@ -197,6 +197,17 @@ const Game = (() => {
   function fieldAvgCar() { return S.ai.reduce((a, t) => a + t.car, 0) / S.ai.length; }
   function carRank() { const mine = carOverall(); return 1 + S.ai.filter(t => t.car > mine).length; }
 
+  // ---------- v1.4 season length ----------
+  // races in the current season (the schedule decides; old saves have 10), and the playoff format for that length
+  function nRaces() { return (S && S.schedule && S.schedule.length) || 10; }
+  function fmt() { return S.poFmt === 2 && !S.free ? DATA.formatFor(S.seriesIdx, nRaces()) : {}; }
+  function promoRule() { return DATA.promoRule(S.seriesIdx, nRaces()); }
+  // the buy-in to move up shrinks with short seasons (less prize money to earn it with); never grows
+  function buyInFor(tier) { return Math.round(DATA.SERIES[tier].buyIn * Math.min(1, nRaces() / 10) / 1000) * 1000; }
+  // the season length you picked (0 = full); takes effect when the next season's schedule is made
+  function seasonLen() { return S && S.seasonLen !== undefined ? S.seasonLen : 10; }
+  function setSeasonLen(len) { if (!S || S.free || S.demo || !DATA.SEASON_LENS.includes(len)) return; S.seasonLen = len; save(); }
+
   // ---------- new career ----------
   function newCareer(o) {
     S = { version: SAVE_VERSION, mode: o.mode, profile: o.profile || 'MANAGER', xp: 0, level: 1, rep: o.mode === 'hired' ? 15 : 12,
@@ -222,7 +233,9 @@ const Game = (() => {
       genFreeAgents(12);
       news(job.owner + ' HIRES ' + S.profile.toUpperCase() + ' TO RUN ' + job.name + ' AT THE ' + s.name + '. TARGET: AVG FINISH ' + job.target + 'TH OR BETTER.');
     }
-    S.schedule = DATA.CALENDARS[si].slice();
+    S.seasonLen = o.seasonLen !== undefined && DATA.SEASON_LENS.includes(o.seasonLen) ? o.seasonLen : 10;
+    if (o.demo) { S.demo = true; S.tutorial = false; }
+    S.schedule = DATA.scheduleFor(si, S.seasonLen);
     resetStandings();
     refreshOffers();
     save();
@@ -353,7 +366,7 @@ const Game = (() => {
   function allSponsors() { if (!S.team) return []; return [S.team.sponsors.primary, S.team.car2 && S.team.car2.primary, ...S.team.sponsors.assoc].filter(Boolean); }
 
   // ---------- driver market ----------
-  function fireCost(d) { const racesLeftThisSeason = 10 - (S.week - 1); return Math.round(d.salary * (racesLeftThisSeason + Math.max(0, d.contract - 1) * 10) * 0.4); }
+  function fireCost(d) { const racesLeftThisSeason = nRaces() - (S.week - 1); return Math.round(d.salary * (racesLeftThisSeason + Math.max(0, d.contract - 1) * nRaces()) * 0.4); }
   function removeFromTeam(id) {
     const t = S.team; if (t.driverId === id) t.driverId = null; if (t.car2 && t.car2.driverId === id) t.car2.driverId = null; t.dev = (t.dev || []).filter(x => x !== id);
   }
@@ -634,7 +647,7 @@ const Game = (() => {
     sum.insp = S.free ? [] : inspect(res, opts.setup || 'bal', opts.forceInsp);
     // points: NASCAR table + stage points, IndyCar table + pole/laps-led bonus for open-wheel, club table for karts; some finales pay double
     const tbl = s.ow ? DATA.POINTS_OW : s.kart ? DATA.POINTS_KART : DATA.POINTS;
-    const FMT = S.poFmt === 2 ? (DATA.FORMATS[s.id] || {}) : {}; const dbl = (FMT.double || []).includes(S.week) ? 2 : 1; sum.double = dbl > 1;
+    const FMT = fmt(); const dbl = (FMT.double || []).includes(S.week) ? 2 : 1; sum.double = dbl > 1;
     const mostLed = res.order.slice().sort((a, b) => (b.lapsLed || 0) - (a.lapsLed || 0))[0];
     for (const r of res.order) {
       const st = S.standings[r.id]; if (!st) continue;
@@ -745,8 +758,8 @@ const Game = (() => {
     // scouted prospects get snapped up by other teams if you wait too long
     for (const d of prospects()) { d.pros.weeks--; if (d.pros.weeks <= 0) { news('PROSPECT ' + driverName(d).toUpperCase() + ' SIGNED WITH ANOTHER TEAM.'); S.scout.list = S.scout.list.filter(x => x !== d.id); delete S.drivers[d.id]; } }
     // promotion scouts
-    if (S.mode === 'owner' && nextTier() !== null && S.week >= 5 && teamBestPos() <= 3 && !S.scoutNews) { S.scoutNews = true; news('SCOUTS FROM THE ' + DATA.SERIES[nextTier()].name + ' ARE WATCHING ' + S.team.name + '!'); }
-    if (isKart() && S.week === 6 && !S.scoutNews) { S.scoutNews = true; news('NASCAR AND INDYCAR SCOUTS ARE AT THE KART TRACK. AFTER THIS SEASON YOU PICK YOUR PATH.'); }
+    if (S.mode === 'owner' && nextTier() !== null && S.week >= Math.ceil(nRaces() / 2) && teamBestPos() <= 3 && !S.scoutNews) { S.scoutNews = true; news('SCOUTS FROM THE ' + DATA.SERIES[nextTier()].name + ' ARE WATCHING ' + S.team.name + '!'); }
+    if (isKart() && S.week === Math.max(2, Math.round(nRaces() * 0.6)) && !S.scoutNews) { S.scoutNews = true; news('NASCAR AND INDYCAR SCOUTS ARE AT THE KART TRACK. AFTER THIS SEASON YOU PICK YOUR PATH.'); }
     sum.fired = false; sum.bankrupt = false;
     if (S.hired && S.hired.confidence <= 0) { sum.fired = true; fired(); }
     if (S.mode === 'owner' && S.money < 0 && !S.debtNews) { S.debtNews = true; news('THE TEAM IS IN THE RED. KEEP RACING - PRIZE MONEY PAYS IT BACK. NO SPENDING UNTIL THEN.' + (S.team.car2 ? ' SELLING CAR 2 IN THE GARAGE ALSO HELPS.' : '')); }
@@ -754,7 +767,7 @@ const Game = (() => {
     sum.trophies = fresh.splice(0);
     sum.standPos = myStandingPos('P'); sum.pts = S.standings.P ? S.standings.P.pts : 0;
     if (two) { sum.standPos2 = myStandingPos('P2'); sum.pts2 = S.standings.P2.pts; }
-    if (S.week >= 10) { S.seasonOver = true; sum.seasonOver = true; }
+    if (S.week >= nRaces()) { S.seasonOver = true; sum.seasonOver = true; }
     else { S.week++; S.day = 1; }
     save();
     return sum;
@@ -788,9 +801,9 @@ const Game = (() => {
   }
   // v1.3 playoffs with eliminations (any series with cuts in DATA.FORMATS). Called after a race's points are in.
   function playoffStep2() {
-    const F = DATA.FORMATS[ser().id]; if (!F || !F.cuts) return;
+    const F = fmt(); if (!F || !F.cuts) return;
     const P = S.playoff;
-    if (S.week === 10 && P && P.final4) {
+    if (S.week === nRaces() && P && P.final4) {
       const r = S.results[S.results.length - 1]; P.finalPos = {};
       for (const o of r.order) if (P.final4.includes(o.id)) P.finalPos[o.id] = o.pos;
       P.champion = P.final4.slice().sort((a, b) => (P.finalPos[a] || 99) - (P.finalPos[b] || 99))[0];
@@ -834,7 +847,7 @@ const Game = (() => {
     return alive.includes(id) ? 'alive' : 'out';
   }
   function playoffRoundName() {
-    const F = DATA.FORMATS[ser().id]; const P = S.playoff; if (!F || !F.cuts || !P) return null;
+    const F = fmt(); const P = S.playoff; if (!F || !F.cuts || !P) return null;
     if (P.final4) return 'CHAMPIONSHIP 4'; const n = (P.alive || P.ids).length; return 'ROUND OF ' + n;
   }
   function fired() {
@@ -867,7 +880,7 @@ const Game = (() => {
     const teamWins = teamCars().reduce((a, c) => a + (S.standings[c.id] ? S.standings[c.id].wins : 0), 0);
     const out = { pos, pts: st.pts, wins: teamWins, top5: st.top5, champion: standingsOrder()[0], options: [] };
     if (S.team.car2) { out.pos1 = myStandingPos('P'); out.pos2 = myStandingPos('P2'); out.ownerPos = ownerStandings().findIndex(r => r.me) + 1; out.ownerPts = ownerStandings().find(r => r.me).pts; }
-    const prize = Math.round(s.purseWin * 4 * Math.max(0, (11 - pos)) / 10 / 1000) * 1000; out.prize = prize;
+    const prize = Math.round(s.purseWin * 4 * Math.max(0, (11 - pos)) / 10 * U.clamp(nRaces() / 10, 0.6, 2.5) / 1000) * 1000; out.prize = prize;
     if (isKart()) {
       // v1.3: the kart season ends with a path choice instead of a buy-in
       out.paths = true;
@@ -875,9 +888,9 @@ const Game = (() => {
     } else if (S.mode === 'owner') {
       const nt = nextTier();
       if (nt !== null) {
-        const pp = s.promoPos || 5, pw = s.promoWins || 2;
+        const pr = promoRule(); const pp = pr.pos, pw = pr.wins;
         const eligible = pos <= pp || teamWins >= pw;
-        const next = DATA.SERIES[nt]; let cost = next.buyIn; if (pos === 1) cost = Math.round(cost * 0.5);
+        let cost = buyInFor(nt); if (pos === 1) cost = Math.round(cost * 0.5);
         out.promo = { eligible, cost, next: nt, afford: S.money + prize >= cost, needPos: pp, needWins: pw };
       }
     } else {
@@ -997,7 +1010,7 @@ const Game = (() => {
       syncField();
     }
     if (S.hired) { const tgt = Math.round(ser().minBudget * (S.team.car2 ? 1.1 : 0.8)); if (S.money < tgt) { news(S.hired.owner + ' TOPS UP THE BUDGET TO ' + U.money(tgt) + '.'); S.money = tgt; } S.hired.confidence = Math.max(S.hired.confidence, 50); }
-    S.schedule = DATA.CALENDARS[tier].slice();
+    S.schedule = DATA.scheduleFor(tier, seasonLen());
     resetStandings(); refreshOffers();
     news('SEASON ' + S.year + ' ' + ser().name + ' BEGINS AT ' + DATA.TRACKS[S.schedule[0]].short + (DATA.eventName(S.seriesIdx, 1) ? ' WITH THE ' + DATA.eventName(S.seriesIdx, 1) : '') + '.');
     save();
@@ -1006,6 +1019,7 @@ const Game = (() => {
   // ---------- save ----------
   // bring a v1.0 save up to date without losing anything
   function migrate(o) {
+    if (o.seasonLen === undefined) o.seasonLen = 10; // v1.4: saves from before season lengths play 10-race seasons
     if (!o || typeof o !== 'object') return o;
     const from = o.version || 1;
     for (const d of Object.values(o.drivers || {})) migrateDriver(d);
@@ -1055,7 +1069,7 @@ const Game = (() => {
     if (o.money >= 1000000) add('million', {});
     return { log, unseen: 0, backfilled: true };
   }
-  function save() { if (!S || S.free) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { console.warn('save failed', e); } }
+  function save() { if (!S || S.free || S.demo) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { console.warn('save failed', e); } }
   function load() {
     try { const j = localStorage.getItem(SAVE_KEY); if (j) { const o = JSON.parse(j); if (!o || !o.team) return false; S = migrate(o); save(); return true; } } catch (e) { console.warn('load failed', e); } return false;
   }
@@ -1100,6 +1114,15 @@ const Game = (() => {
     return S;
   }
   function endFree() { if (S && S.free) { S = STASH; STASH = null; } }
+  // v1.4 tutorial: a throwaway owner team in karting. It never saves, and the real career comes back untouched.
+  function startDemo(profile) {
+    if (S && S.free) endFree(); if (S && S.demo) endDemo();
+    STASH = S; const prof = profile || (S && S.profile) || 'YOU';
+    newCareer({ mode: 'owner', profile: prof, teamName: 'PRACTICE RACING', number: 7, colors: { body: '#d9342b', stripe: '#f2d22e' }, demo: true });
+    return S;
+  }
+  function endDemo() { if (S && S.demo) { S = STASH; STASH = null; } }
+  function isDemo() { return !!(S && S.demo); }
   function isFree() { return !!(S && S.free); }
   return {
     get S() { return S; }, ser, migrateTracks, news, award, trophyCount, trophyName, teamWins, save, load, exportCode, importCode, wipe, newCareer, genJob, migrate,
@@ -1113,5 +1136,7 @@ const Game = (() => {
     // v1.3
     pathOf, ladderOf, nextTier, prevTier, isKart, isTop, extOffer, extChance, extendContract, canNegotiate, EXT_LEVELS, renameDriver, nameOk, merchIncome, rollEvent, inspRisk, inspWord, inspect,
     playoffStatus, playoffRoundName, freeTeams, startFree, endFree, isFree, fixFac,
+    // v1.4
+    nRaces, fmt, promoRule, buyInFor, seasonLen, setSeasonLen, startDemo, endDemo, isDemo,
   };
 })();

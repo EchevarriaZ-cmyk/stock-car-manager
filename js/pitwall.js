@@ -167,6 +167,12 @@ const PW = (() => {
       { O: OUT, M: '#7ee04a', D: '#3a8a1c', S: '#2f62d8', K: '#f3cfae' }],
     speed: [['..OOOOO..', '.OYYYYYO.', 'OYO.Y.OYO', 'OY..O..YO', 'OY.O...YO', 'OYO...OYO', '.OO...OO.'], { O: OUT, Y: '#e6ff2b' }],
     flag: [['O........', 'OWKWKWKO.', 'OKWKWKWO.', 'OWKWKWKO.', 'OOOOOOOO.', 'O........', 'O........'], { O: '#ff3b47', W: '#f4f4f4', K: '#1b1b1b' }],
+    // v1.4 settings + race pit-wall icons
+    gear: [['...OO...', '.O.OO.O.', 'OOOWWOOO', '.OW..WO.', '.OW..WO.', 'OOOWWOOO', '.O.OO.O.', '...OO...'], { O: '#c9ced6', W: '#8b929c' }],
+    fuel: [['.OOOO...', 'OYYYYO.O', 'OYOOYOOO', 'OYYYYO.O', 'OYYYYO.O', 'OYYYYOO.', 'OYYYYO..', 'OOOOOO..'], { O: '#141414', Y: '#ffd000' }],
+    wrench: [['.OO...O.', 'O.W..OO.', 'OWW.OO..', '.OWOO...', '..OWO...', '.OOOWO..', 'OO..OWO.', 'O....OO.'], { O: '#141414', W: '#c9ced6' }],
+    four: [['OO.OO', 'OO.OO', '.....', 'OO.OO', 'OO.OO'], { O: '#f4f4f4' }],
+    two: [['OO.KK', 'OO.KK', '.....', 'OO.KK', 'OO.KK'], { O: '#f4f4f4', K: '#3a3f47' }],
     tire: [['..OOOOO..', '.OKKKKKO.', 'OKKGGGKKO', 'OKGKKKGKO', 'OKGKKKGKO', 'OKKGGGKKO', '.OKKKKKO.', '..OOOOO..'], { O: '#2ecc40', K: '#1b1b1b', G: '#2ecc40' }],
   };
   function icon(name, scale) {
