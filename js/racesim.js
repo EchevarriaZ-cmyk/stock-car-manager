@@ -9,8 +9,9 @@ const RaceSim = (() => {
   };
   const PIT_TIME = { four: 0.42, two: 0.26, fuel: 0.13 };
 
+  // v1.6: entries that already went through the Cup field cut carry their qualifying score (qs), so the grid matches who made it
   function qualify(entries, type) {
-    return entries.map(e => ({ e, s: 0.55 * e.car + 0.45 * (e.drv * 0.6 + e.speed * 0.4) + U.gauss() * 2.2 + (e.isPlayer ? e.qualBonus || 0 : 0) }))
+    return entries.map(e => ({ e, s: e.qs !== undefined ? e.qs : 0.55 * e.car + 0.45 * (e.drv * 0.6 + e.speed * 0.4) + U.gauss() * 2.2 + (e.isPlayer ? e.qualBonus || 0 : 0) }))
       .sort((a, b) => b.s - a.s).map(x => x.e);
   }
 
@@ -69,6 +70,7 @@ const RaceSim = (() => {
       // v1.4: split pit roads (Bristol, Martinsville): the front half of the grid gets the frontstretch boxes
       const zs = this.geom.zones || [{ n }];
       if (zs.length > 1) { const n0 = Math.ceil(n / 2); this.cars.forEach((c, i) => { if (i < n0) { c.pz = 0; c.stall = 1 - (i + 0.5) / n0; } else { c.pz = 1; c.stall = 1 - (i - n0 + 0.5) / Math.max(1, n - n0); } }); }
+      else if (this.geom.split) { const rows = Math.ceil(n / 2); this.cars.forEach((c, i) => { c.pz = 0; c.pside = i % 2; c.stall = 1 - (Math.floor(i / 2) + 0.5) / rows; }); } // v1.5 Detroit: boxes on both sides
       else this.cars.forEach((c, i) => { c.pz = 0; c.stall = 1 - (i + 0.5) / Math.max(1, n); });
       this.cars.forEach(c => c.lastFrac = this.frac(c.d));
       this.msg('GREEN FLAG! ' + (this.geom.event ? 'THE ' + this.geom.event + ' - ' : '') + this.laps + ' LAPS AT ' + this.geom.def.short, 'green');
@@ -218,8 +220,10 @@ const RaceSim = (() => {
           const pv = bv * 0.5; // pit road speed limit (longer v1.3 pit roads)
           if (c.pit.phase === 'lane') {
             desired = pv;
+            if (g.def.street) { const zz = g.zones[c.pz || 0]; if (prog < zz.boxA) { const t = U.clamp(prog / zz.boxA, 0, 1); const tgt = g.lanes[0] + (g.pitLat - g.lanes[0]) * t * t * (3 - 2 * t); c.latT = tgt; if (Math.abs(c.lat - tgt) > 2) c.lat += U.clamp(tgt - c.lat, -3, 3); } else if (c.latT !== g.pitLat && Math.abs(c.lat - g.pitLat) < 30) c.latT = g.pitLat; }
             if (prog >= g.boxProg(c.stall, c.pz)) {
-              c.pit.phase = 'stop'; c.v = 0; desired = 0; if (g.boxLat) c.latT = g.boxLat;
+              c.d -= Math.min(0.01, prog - g.boxProg(c.stall, c.pz)); // v1.5: stop right on the box marks (no overshoot from the step size)
+              c.pit.phase = 'stop'; c.v = 0; desired = 0; if (g.boxLat) c.latT = g.boxLatFor ? g.boxLatFor(c) : g.boxLat;
               const base = PIT_TIME[c.pit.type] * this.lapTime;
               const ps = c.e.pit === undefined ? 50 : c.e.pit; // driver hitting the marks on pit road
               let time = base * (1.3 - c.crew * 0.5) * (1.07 - ps / 100 * 0.14) + (c.damage > 0.05 ? (0.2 + c.damage) * this.lapTime : 0);
@@ -240,7 +244,10 @@ const RaceSim = (() => {
             }
           } else if (c.pit.phase === 'exit') {
             desired = pv;
-            if (prog > g.zones[c.pz || 0].range) { c.pit = null; c.latT = g.lanes[0]; }
+            const zz = g.zones[c.pz || 0];
+            // v1.5 street courses: ride the drawn exit lane back onto the track (walls right there) instead of cutting across
+            if (g.def.street && prog > zz.boxB) { const t = U.clamp((prog - zz.boxB) / (zz.range - zz.boxB), 0, 1); c.lat = c.latT = g.pitLat + (g.lanes[0] - g.pitLat) * t * t * (3 - 2 * t); }
+            if (prog > zz.range) { c.pit = null; c.latT = g.lanes[0]; }
           }
         } else if (c.status === 'fin') {
           desired = paceV * 0.9;

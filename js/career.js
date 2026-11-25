@@ -124,8 +124,10 @@ const Game = (() => {
     return teams;
   }
   // keep the field at the series size: team cars + AI cars = series cars
+  // v1.6: the Cup carries a couple of extra open teams that can fail to qualify (field cap = series cars)
+  function aiWant() { return ser().cars + (S.free ? 0 : (ser().openExtra || 0)) - teamCars().length; }
   function syncField() {
-    const want = ser().cars - teamCars().length;
+    const want = aiWant();
     const prot = new Set(S.playoff ? S.playoff.ids : []);
     while (S.ai.length > want) {
       const pool = S.ai.filter(t => !prot.has(t.id)); const list = pool.length ? pool : S.ai;
@@ -191,7 +193,7 @@ const Game = (() => {
     news(S.team.name + ' SELLS THE #' + c2.number + ' CAR FOR ' + U.money(refund) + '.'); save();
   }
 
-  function effParts() { const p = S.team.parts, f = S.team.fac; return { engine: p.engine + f.engineDept * 1.5, aero: p.aero + ((f.windTunnel || 1) - 1) * 1.5, chassis: p.chassis + ((f.chassisRig || 1) - 1) * 1.5 }; }
+  function effParts() { const p = S.team.parts, f = S.team.fac; return { engine: p.engine + f.engineDept * 1.5 + (typeof Biz !== 'undefined' ? Biz.engineBonus() : 0), aero: p.aero + ((f.windTunnel || 1) - 1) * 1.5, chassis: p.chassis + ((f.chassisRig || 1) - 1) * 1.5 }; }
   function carRating(type) { const w = DATA.PART_W[type], e = effParts(); return w.engine * e.engine + w.aero * e.aero + w.chassis * e.chassis; }
   function carOverall() { return Math.round((carRating('short') + carRating('intermediate') + carRating('superspeedway') + carRating('road')) / 4); }
   function fieldAvgCar() { return S.ai.reduce((a, t) => a + t.car, 0) / S.ai.length; }
@@ -238,6 +240,7 @@ const Game = (() => {
     S.schedule = DATA.scheduleFor(si, S.seasonLen);
     resetStandings();
     refreshOffers();
+    if (typeof Biz !== 'undefined') Biz.ensure(S);
     save();
     return S;
   }
@@ -516,7 +519,7 @@ const Game = (() => {
       const d = carDriver(tc.slot); if (!d) continue;
       const e = Object.assign({ id: tc.id, slot: tc.slot, isPlayer: true, number: tc.number, team: S.team.name, driverShort: driverShort(d), driver: driverName(d), livery: carLivery(tc.slot),
         car: carRating(type) + setup.car, drv: driverTypeRating(d, type) + simB,
-        rel: Math.min(110, 55 + S.team.fac.engineDept * 7 + (S.team.parts.engine - ser().floor) * 0.3), crew: Math.min(1.1, 0.35 + S.team.fac.pitCenter * 0.12), qualBonus: setup.qual }, drvFields(d, simB));
+        rel: Math.min(110, 55 + S.team.fac.engineDept * 7 + (S.team.parts.engine - ser().floor) * 0.3), crew: Math.min(1.12, 0.35 + S.team.fac.pitCenter * 0.12 + (typeof Biz !== 'undefined' ? Biz.chiefCrew() : 0)), qualBonus: setup.qual }, drvFields(d, simB));
       e.cons = U.clamp(e.cons + setup.cons, 1, 99);
       out.push(e);
     }
@@ -525,6 +528,8 @@ const Game = (() => {
       out.push(Object.assign({ id: t.id, isPlayer: false, number: t.number, team: t.name, driverShort: driverShort(ad), driver: driverName(ad), livery: withModel(t.livery),
         car: t.car + t.typeVar[type], drv: driverTypeRating(ad, type), rel: 60 + (t.car - ser().floor) * 0.6, crew: t.crew }, drvFields(ad)));
     }
+    // v1.6: Cup charters - chartered cars are locked in, open cars race in on qualifying speed
+    if (typeof Biz !== 'undefined') return Biz.fieldCut(out, type);
     return out;
   }
 
@@ -659,14 +664,15 @@ const Game = (() => {
     res.stages.forEach(stg => { if (S.standings[stg[0]]) { S.standings[stg[0]].stageWins++; S.standings[stg[0]].pp += 1; } });
     const cars = teamCars().map(tc => ({ tc, r: res.order.find(o => o.id === tc.id) })).filter(x => x.r);
     const two = cars.length > 1;
-    const me = (cars.find(x => x.tc.slot === 1) || cars[0]).r; const me2 = two ? cars.find(x => x.tc.slot === 2).r : null;
-    const best = cars.map(x => x.r).sort((a, b) => a.pos - b.pos)[0];
+    // v1.6: an open Cup car can fail to qualify - then it has no result (cars can be empty)
+    const me = cars.length ? (cars.find(x => x.tc.slot === 1) || cars[0]).r : null; const me2 = two ? cars.find(x => x.tc.slot === 2).r : null;
+    const best = cars.length ? cars.map(x => x.r).sort((a, b) => a.pos - b.pos)[0] : null;
     sum.me = me; sum.me2 = me2; sum.best = best; sum.two = two;
     const tag = (tc) => two ? ' #' + tc.number : '';
     // money
     for (const { tc, r } of cars) sum.lines.push(['PURSE' + tag(tc) + ' (' + U.ordinal(r.pos) + ')', purse(r.pos)]);
     const ev = DATA.eventName(S.seriesIdx, S.week); sum.event = ev;
-    if (ev === 'DAYTONA 500' || ev === 'INDY 500') sum.lines.push([ev + ' BONUS PURSE', Math.round(cars.reduce((a, x) => a + purse(x.r.pos), 0) * 0.5 / 100) * 100]);
+    if ((ev === 'DAYTONA 500' || ev === 'INDY 500') && cars.length) sum.lines.push([ev + ' BONUS PURSE', Math.round(cars.reduce((a, x) => a + purse(x.r.pos), 0) * 0.5 / 100) * 100]);
     let spTotal = 0, bonusTotal = 0;
     const byCar = { 1: me, 2: me2 };
     for (const sp of allSponsors()) {
@@ -680,7 +686,7 @@ const Game = (() => {
     if (spTotal) sum.lines.push(['SPONSOR PAYMENTS', spTotal]);
     if (bonusTotal) sum.lines.push(['SPONSOR BONUSES', bonusTotal]);
     if (!S.free) {
-      const merch = merchIncome(best); if (merch > 0) sum.lines.push(['MERCH SALES', merch]);
+      const merch = best ? merchIncome(best) : 0; if (merch > 0) sum.lines.push(['MERCH SALES', merch]);
       for (const f of sum.insp) { if (f.fine) sum.lines.push(['INSPECTION FINE #' + f.num, -f.fine]); if (f.pts && S.standings[f.id]) { S.standings[f.id].pts = Math.max(0, S.standings[f.id].pts - f.pts); } news(f.text); }
       sum.teamEvent = rollEvent(opts.forceEvent); if (sum.teamEvent && sum.teamEvent.amt) sum.lines.push(['EVENT: ' + sum.teamEvent.title, sum.teamEvent.amt]);
     }
@@ -695,6 +701,7 @@ const Game = (() => {
       if (dm > 0.05 || r.status === 'CRASH') { const rep = Math.round((r.status === 'CRASH' ? 0.9 : dm) * (s.entry ? 6500 * s.mult : 45000 * s.mult) / 100) * 100; sum.lines.push(['CRASH REPAIRS' + tag(tc), -rep]); }
       if (r.status === 'ENGINE') sum.lines.push(['ENGINE REBUILD' + tag(tc), -(s.entry ? Math.round(6000 * s.mult) : Math.round(30000 * s.mult))]);
     }
+    if (typeof Biz !== 'undefined' && !S.free) Biz.raceLines(sum, cars);
     let net = 0; for (const l of sum.lines) net += l[1]; sum.net = net; S.money += net;
     // expired sponsors
     for (const sp of allSponsors().filter(x => x.races <= 0)) {
@@ -706,13 +713,13 @@ const Game = (() => {
       else news(sp.name + ' CONTRACT ENDS. THEY WERE NOT HAPPY WITH RESULTS.');
     }
     // rep & xp (from the team's best car)
-    const repD = U.clamp((N * 0.75 - best.pos) / N * 5 + (best.status === 'RUNNING' ? 0.3 : 0) + (best.pos <= 10 && !(S.stats.top10) ? 1.5 : 0) + (best.pos === 1 ? 3 : 0), -2, 6);
+    const repD = !best ? -1.5 : U.clamp((N * 0.75 - best.pos) / N * 5 + (best.status === 'RUNNING' ? 0.3 : 0) + (best.pos <= 10 && !(S.stats.top10) ? 1.5 : 0) + (best.pos === 1 ? 3 : 0), -2, 6);
     const repAdj = repD > 0 ? repD * (1 - S.rep / 130) : repD; S.rep = U.clamp(S.rep + repAdj, 0, 100); sum.repD = repAdj;
-    const xp = 10 + (N - best.pos + 1) * 2 + (best.pos === 1 ? 25 : 0) + res.stages.filter(x => isTeamId(x[0])).length * 5 + (two ? 5 : 0);
+    const xp = !best ? 5 : 10 + (N - best.pos + 1) * 2 + (best.pos === 1 ? 25 : 0) + res.stages.filter(x => isTeamId(x[0])).length * 5 + (two ? 5 : 0);
     S.xp += xp; sum.xp = xp; sum.levelUp = false;
     while (S.xp >= S.level * DATA.XP_PER_LEVEL) { S.xp -= S.level * DATA.XP_PER_LEVEL; S.level++; sum.levelUp = true; news('LEVEL UP! MANAGER LEVEL ' + S.level + '.'); }
-    S.stats.races++; if (best.pos <= 10) S.stats.top10 = (S.stats.top10 || 0) + 1; if (best.pos <= 15) S.stats.top15 = (S.stats.top15 || 0) + 1;
-    S.stats.wins += cars.filter(x => x.r.pos === 1).length; if (best.pos <= 5) S.stats.top5++; if (cars.some(x => x.r.grid === 1)) S.stats.poles++;
+    if (best) S.stats.races++; if (best && best.pos <= 10) S.stats.top10 = (S.stats.top10 || 0) + 1; if (best && best.pos <= 15) S.stats.top15 = (S.stats.top15 || 0) + 1;
+    S.stats.wins += cars.filter(x => x.r.pos === 1).length; if (best && best.pos <= 5) S.stats.top5++; if (cars.some(x => x.r.grid === 1)) S.stats.poles++;
     // trophies
     for (const { tc, r } of cars) {
       const d = carDriver(tc.slot); const info = { track: trackId, driver: driverName(d), num: tc.number, pos: r.pos };
@@ -736,14 +743,15 @@ const Game = (() => {
     }
     for (const id of S.team.dev || []) { const d = S.drivers[id]; if (!d) continue; const k = raceGrowth(d, 0); if (k) sum.drvUp.push([d, k]); d.morale = U.clamp((d.morale || 70) - 0.5, 30, 100); }
     // hired confidence (average of the team's cars)
-    if (S.hired) {
+    if (S.hired && !cars.length) { const cd = -8; S.hired.confidence = U.clamp(S.hired.confidence + cd, 0, 100); sum.confD = cd; }
+    else if (S.hired) {
       const avg = cars.reduce((a, x) => a + x.r.pos, 0) / cars.length; const anyOut = cars.some(x => x.r.status !== 'RUNNING');
       const cd = U.clamp((S.hired.target - avg) * 1.6, -14, 10) + (anyOut ? -4 : 0) + (S.money < 0 ? -8 : 0);
       S.hired.confidence = U.clamp(S.hired.confidence + cd, 0, 100); sum.confD = cd;
     }
     // news
     const win = res.order[0]; const wi = entryInfo(win.id);
-    news(DATA.TRACKS[trackId].short + ': #' + wi.number + ' ' + wi.driver.toUpperCase() + ' WINS. ' + S.team.name + (two ? ': #' + S.team.number + ' ' + U.ordinal(me.pos) + ', #' + S.team.car2.number + ' ' + U.ordinal(me2.pos) + '.' : ' FINISHES ' + U.ordinal(me.pos) + '.'));
+    news(DATA.TRACKS[trackId].short + ': #' + wi.number + ' ' + wi.driver.toUpperCase() + ' WINS. ' + S.team.name + (!me ? ' DID NOT QUALIFY.' : two ? ': #' + S.team.number + ' ' + U.ordinal(me.pos) + ', #' + S.team.car2.number + ' ' + U.ordinal(me2.pos) + '.' : ' FINISHES ' + U.ordinal(me.pos) + '.'));
     if (isTeamId(win.id)) news('VICTORY LANE! FIRST PLACE FOR ' + S.team.name + ' AT ' + DATA.TRACKS[trackId].short + '!');
     S.results.push({ track: trackId, order: res.order.map(r => ({ id: r.id, pos: r.pos, status: r.status, pts: r.pts, laps: r.laps, lapsLed: r.lapsLed, stagePts: r.stagePts, grid: r.grid })), stages: res.stages, cautions: res.cautions });
     // playoffs: v1.3 rounds with eliminations; a save from before v1.3 finishes its season on the old Cup format
@@ -760,6 +768,7 @@ const Game = (() => {
     // promotion scouts
     if (S.mode === 'owner' && nextTier() !== null && S.week >= Math.ceil(nRaces() / 2) && teamBestPos() <= 3 && !S.scoutNews) { S.scoutNews = true; news('SCOUTS FROM THE ' + DATA.SERIES[nextTier()].name + ' ARE WATCHING ' + S.team.name + '!'); }
     if (isKart() && S.week === Math.max(2, Math.round(nRaces() * 0.6)) && !S.scoutNews) { S.scoutNews = true; news('NASCAR AND INDYCAR SCOUTS ARE AT THE KART TRACK. AFTER THIS SEASON YOU PICK YOUR PATH.'); }
+    if (typeof Biz !== 'undefined' && !S.free) Biz.afterRace(sum);
     sum.fired = false; sum.bankrupt = false;
     if (S.hired && S.hired.confidence <= 0) { sum.fired = true; fired(); }
     if (S.mode === 'owner' && S.money < 0 && !S.debtNews) { S.debtNews = true; news('THE TEAM IS IN THE RED. KEEP RACING - PRIZE MONEY PAYS IT BACK. NO SPENDING UNTIL THEN.' + (S.team.car2 ? ' SELLING CAR 2 IN THE GARAGE ALSO HELPS.' : '')); }
@@ -911,6 +920,7 @@ const Game = (() => {
     const sumy = seasonSummary(); const s = ser();
     if (!sumy.applied) {
       sumy.applied = true; S.money += sumy.prize;
+      if (typeof Biz !== 'undefined') Biz.seasonEnd();
       S.history.push({ season: S.season, year: S.year, series: s.short, pos: sumy.pos, wins: sumy.wins, team: S.team.name, pts: sumy.pts, cars: teamCars().length });
       if (sumy.pos === 1) {
         S.stats.titles++; news(S.team.name + ' ARE ' + S.year + ' ' + s.name + ' CHAMPIONS!');
@@ -976,6 +986,7 @@ const Game = (() => {
   }
   function startSeason(tier, freshTeam) {
     const changed = tier !== S.seriesIdx; const oldFloor = ser().floor;
+    if (typeof Biz !== 'undefined') Biz.preSeason(freshTeam);
     S.season++; S.year++; S.week = 1; S.day = 1; S.seasonOver = false; S.scoutNews = false; S.results = []; S.poFmt = 2; fixFac(S.team);
     // driver development & contracts
     const mineIds = new Set(teamDriverIds());
@@ -999,7 +1010,7 @@ const Game = (() => {
       const keep = new Set(teamDriverIds().concat(expired));
       for (const id of Object.keys(S.drivers)) if (!keep.has(id)) delete S.drivers[id];
       S.freeAgents = S.freeAgents.filter(id => S.drivers[id]); S.scout.list = [];
-      S.ai = []; S.ai = genAITeams(tier, ser().cars - teamCars().length); genFreeAgents(11); genRookies(3);
+      S.ai = []; S.ai = genAITeams(tier, aiWant()); genFreeAgents(11); genRookies(3);
       if (!freshTeam) { const had = allSponsors(); if (had.length) news('SPONSOR DEALS END WITH THE MOVE UP. NEW, BIGGER OFFERS ARE IN.'); S.team.sponsors = { primary: null, assoc: [null, null] }; if (S.team.car2) S.team.car2.primary = null; }
       S.offers = [];
       S.team.rnd = [];
@@ -1012,6 +1023,7 @@ const Game = (() => {
     if (S.hired) { const tgt = Math.round(ser().minBudget * (S.team.car2 ? 1.1 : 0.8)); if (S.money < tgt) { news(S.hired.owner + ' TOPS UP THE BUDGET TO ' + U.money(tgt) + '.'); S.money = tgt; } S.hired.confidence = Math.max(S.hired.confidence, 50); }
     S.schedule = DATA.scheduleFor(tier, seasonLen());
     resetStandings(); refreshOffers();
+    if (typeof Biz !== 'undefined') Biz.seasonStart(changed, freshTeam);
     news('SEASON ' + S.year + ' ' + ser().name + ' BEGINS AT ' + DATA.TRACKS[S.schedule[0]].short + (DATA.eventName(S.seriesIdx, 1) ? ' WITH THE ' + DATA.eventName(S.seriesIdx, 1) : '') + '.');
     save();
   }
@@ -1031,6 +1043,7 @@ const Game = (() => {
     migrateTracks(o);
     if (!o.trophies) o.trophies = backfillTrophies(o);
     if (from < 2) { o.migratedFrom = from; o.version = SAVE_VERSION; }
+    if (typeof Biz !== 'undefined') Biz.migrate(o); // v1.6: charters, rivals, crew chief, manufacturer
     return o;
   }
   // v1.2: made-up tracks became real ones. Map old ids everywhere they appear (schedule, results, trophies, news).
@@ -1134,6 +1147,7 @@ const Game = (() => {
     genSponsor, goalText, signSponsor, dropSponsor, dropPenalty, allSponsors, refreshOffers,
     entryInfo, standingsOrder, myStandingPos, teamBestPos, ownerStandings, buildEntries, processRace, purse, seasonSummary, finishSeason, takeJob, passDays, syncField,
     // v1.3
+    aiWant, removeFromTeam,
     pathOf, ladderOf, nextTier, prevTier, isKart, isTop, extOffer, extChance, extendContract, canNegotiate, EXT_LEVELS, renameDriver, nameOk, merchIncome, rollEvent, inspRisk, inspWord, inspect,
     playoffStatus, playoffRoundName, freeTeams, startFree, endFree, isFree, fixFac,
     // v1.4

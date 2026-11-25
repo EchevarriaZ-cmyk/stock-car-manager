@@ -3,9 +3,11 @@
 const Renderer = (() => {
   const PAL = ['#3f8f2f', '#4aa23a', '#5c5c5c', '#666666', '#525252', '#474747', '#e6e6e6', '#2f2f2f', '#f2c81e', '#f4f4f4', '#9a9a9a', '#7d7d7d',
     '#b8b8b8', '#1b1b1b', '#c4232b', '#6b6b6b'];
-  const PALRGB = PAL.map(U.hexToRgb);
+  const PALRGB_DEF = PAL.map(U.hexToRgb);
   const CROWD = ['#d9342b', '#1d5fd1', '#f2d22e', '#f4f4f4', '#2e8b3a', '#f28c18', '#1b1b1b', '#f07ab8'];
-  function quantize(ctx, w, h) {
+  const PALRGB_ST = PAL.concat(typeof Street !== 'undefined' ? Street.GROUND : []).map(U.hexToRgb);
+  function quantize(ctx, w, h, palRGB) {
+    const PALRGB = palRGB || PALRGB_DEF;
     const id = ctx.getImageData(0, 0, w, h), d = id.data; const memo = new Map();
     for (let i = 0; i < d.length; i += 4) {
       const k = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
@@ -26,10 +28,14 @@ const Renderer = (() => {
     const hw = geom.hw, isRoad = geom.type === 'road';
     // v1.3: street courses sit in a concrete city block instead of grass
     const street = !!geom.def.street;
+    const city = street && typeof Street !== 'undefined' && Street.has(geom.id); // v1.5: real city scenery
+    if (city) Street.drawGround(x, geom, s, W, H);
+    else {
     x.fillStyle = street ? PAL[12] : PAL[0]; x.fillRect(0, 0, W, H);
     x.fillStyle = street ? PAL[10] : PAL[1];
     const band = Math.max(3, 28 * s);
     for (let i = -H; i < W + H; i += band * 2) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + band, 0); x.lineTo(i + band - H * 0.6, H); x.lineTo(i - H * 0.6, H); x.closePath(); x.fill(); }
+    }
     const K = Math.max(60, Math.round(geom.M / 2));
     const pt = (f, o) => { const p = geom.pos(f, o); return [p.x * s, p.y * s]; };
     const poly = (o, f0, f1, rev) => {
@@ -43,16 +49,25 @@ const Renderer = (() => {
     // v1.4 grandstands where the real ones are (outside the wall): tiered seating with concourses between the tiers,
     // stair aisles, a back wall, and suites on the main stand. The crowd and the press box go on after the palette pass.
     const stands = DATA.standsFor(geom.id); const tiers = [];
+    // v1.5: Q flips a lateral to the other side when pit road is on the right of travel (St. Pete, Long Beach): pit road
+    // stuff is written as negative laterals, stands as positive ones. A 4th stand value of -1 puts that stand on the pit side.
+    const Q = v => geom.side === 1 ? -v : v;
     const sideOf = (f0, f1) => { const span = ((f1 - f0) % 1 + 1) % 1 || 1; return { span, main: f0 <= 0 && f1 >= 0 || span >= 0.99 }; };
-    for (const [f0, f1, dep] of stands) {
+    for (const [f0, f1, dep, flip] of stands) {
+      const sg = (geom.side === 1 ? -1 : 1) * (flip === -1 ? -1 : 1), L2 = v => sg * v;
       const o0 = hw + 16, nt = dep >= 60 ? 3 : dep >= 34 ? 2 : 1, td = (dep - 4) / nt; const { span, main } = sideOf(f0, f1);
-      seg(o0, o0 + dep, f0, f1, PAL[10]);
-      for (let t = 0; t < nt; t++) { const a = o0 + 1 + t * td, b = a + td - (t < nt - 1 ? 3 : 1); seg(a, b, f0, f1, PAL[4]); tiers.push([f0, span, a, b, main && t === nt - 1 && dep >= 60]); }
+      seg(L2(o0), L2(o0 + dep), f0, f1, PAL[10]);
+      for (let t = 0; t < nt; t++) { const a = o0 + 1 + t * td, b = a + td - (t < nt - 1 ? 3 : 1); seg(L2(a), L2(b), f0, f1, PAL[4]); tiers.push([f0, span, L2(a), L2(b), main && t === nt - 1 && dep >= 60]); }
       const stair = Math.max(36, 60 * Math.min(1, 0.35 / Math.max(0.2, s))) / geom.L;
-      for (let f = f0 + stair / 2; f < f0 + span - stair / 3; f += stair) seg(o0, o0 + dep - 3, f, f + 3 / geom.L, PAL[12]);
-      seg(o0 + dep - 3, o0 + dep, f0, f1, PAL[7]);
+      for (let f = f0 + stair / 2; f < f0 + span - stair / 3; f += stair) seg(L2(o0), L2(o0 + dep - 3), f, f + 3 / geom.L, PAL[12]);
+      seg(L2(o0 + dep - 3), L2(o0 + dep), f0, f1, PAL[7]);
     }
     if (!isRoad) { ring(hw, hw + 5, PAL[6]); ring(hw + 8, hw + 10, PAL[7]); }
+    else if (city) { // v1.5: concrete walls with block seams, then the catch fence (mesh + posts drawn later)
+      ring(hw + 7.5, hw + 10, PAL[11]); ring(-hw - 10, -hw - 7.5, PAL[11]);
+      ring(hw, hw + 6, PAL[9]); ring(-hw - 6, -hw, PAL[9]); ring(hw + 6, hw + 7, PAL[13]); ring(-hw - 7, -hw - 6, PAL[13]);
+      for (let f = 0; f < 1; f += 18 / geom.L) { seg(hw + 0.5, hw + 6, f, f + 1 / geom.L, PAL[12]); seg(-hw - 6, -hw - 0.5, f, f + 1 / geom.L, PAL[12]); }
+    }
     else if (street) { ring(hw, hw + 6, PAL[9]); ring(-hw - 6, -hw, PAL[9]); ring(hw + 6, hw + 7, PAL[13]); ring(-hw - 7, -hw - 6, PAL[13]); }
     else { ring(hw, hw + 4, PAL[6]); ring(-hw - 4, -hw, PAL[6]); }
     // track surface + apron
@@ -69,23 +84,29 @@ const Renderer = (() => {
     const lane = (f0, f1, latO, latI, col) => { const span = ((f1 - f0) % 1 + 1) % 1 || 1; const n = Math.max(3, Math.ceil(K * span * 2)); const A = [], B = [];
       for (let i = 0; i <= n; i++) { const t = i / n, f = f0 + span * t; A.push(pt(f, latO(t))); B.push(pt(f, latI(t))); }
       x.fillStyle = col; x.beginPath(); x.moveTo(A[0][0], A[0][1]); for (const q of A.concat(B.reverse())) x.lineTo(q[0], q[1]); x.closePath(); x.fill(); };
+    const qseg = (a, b, f0, f1, col) => seg(Q(a), Q(b), f0, f1, col), qlane = (f0, f1, lo, li, col) => lane(f0, f1, t => Q(lo(t)), t => Q(li(t)), col);
     const PO = -hw - 18, PI = -hw - 62; // pit road edges along the boxes (track side / pit wall side)
     const pitInfo = [];
     geom.zones.forEach((z) => {
       const ps = z.start, bA = ps + z.boxA, bB = ps + z.boxB, pe = ps + z.range;
-      lane(ps, bA, t => -hw + 1 - sm(t) * 19, t => -hw - 6 - sm(t) * 56, PAL[15]);
-      lane(bA - 0.001, bB + 0.001, () => PO, () => PI, PAL[15]);
-      lane(bB, pe, t => PO + sm(t) * 19, t => PI + sm(t) * 56, PAL[15]);
+      qlane(ps, bA, t => -hw + 1 - sm(t) * 19, t => -hw - 6 - sm(t) * 56, PAL[15]);
+      qlane(bA - 0.001, bB + 0.001, () => PO, () => PI, PAL[15]);
+      qlane(bB, pe, t => PO + sm(t) * 19, t => PI + sm(t) * 56, PAL[15]);
       // inside wall line (track side of pit road) with gaps for the entry and exit lanes
-      seg(-hw - 15, -hw - 19, bA - z.boxA * 0.25, bB + (z.range - z.boxB) * 0.2, PAL[12]); seg(-hw - 19, -hw - 20, bA - z.boxA * 0.25, bB + (z.range - z.boxB) * 0.2, PAL[7]);
+      qseg(-hw - 15, -hw - 19, bA - z.boxA * 0.25, bB + (z.range - z.boxB) * 0.2, PAL[12]); qseg(-hw - 19, -hw - 20, bA - z.boxA * 0.25, bB + (z.range - z.boxB) * 0.2, PAL[7]);
       // fast lane / box lane divider (dashed) and the box lines
-      for (let f = bA; f < bB; f += 10 / geom.L) seg(-hw - 41.5, -hw - 43, f, f + 5 / geom.L, PAL[9]);
-      for (let i = 0; i <= z.n; i++) { const f = bA + (bB - bA) * i / z.n; seg(-hw - 43, -hw - 60, f, f + 1.3 / geom.L, PAL[9]); }
+      if (geom.split) { // v1.5 Detroit: median pit lane, a row of boxes on each side of the fast lane
+        for (const [d1, d2] of [[-hw - 31, -hw - 32.5], [-hw - 47.5, -hw - 49]]) for (let f = bA; f < bB; f += 10 / geom.L) qseg(d1, d2, f, f + 5 / geom.L, PAL[9]);
+        for (let i = 0; i <= z.n; i++) { const f = bA + (bB - bA) * i / z.n; qseg(-hw - 19, -hw - 31, f, f + 1.3 / geom.L, PAL[9]); qseg(-hw - 49, -hw - 60, f, f + 1.3 / geom.L, PAL[9]); }
+      } else {
+      for (let f = bA; f < bB; f += 10 / geom.L) qseg(-hw - 41.5, -hw - 43, f, f + 5 / geom.L, PAL[9]);
+      for (let i = 0; i <= z.n; i++) { const f = bA + (bB - bA) * i / z.n; qseg(-hw - 43, -hw - 60, f, f + 1.3 / geom.L, PAL[9]); }
+      }
       // pit wall
-      seg(-hw - 60, -hw - 64, bA - z.boxA * 0.4, bB + (z.range - z.boxB) * 0.35, PAL[9]); seg(-hw - 64, -hw - 65.5, bA - z.boxA * 0.4, bB + (z.range - z.boxB) * 0.35, PAL[7]);
+      qseg(-hw - 60, -hw - 64, bA - z.boxA * 0.4, bB + (z.range - z.boxB) * 0.35, PAL[9]); qseg(-hw - 64, -hw - 65.5, bA - z.boxA * 0.4, bB + (z.range - z.boxB) * 0.35, PAL[7]);
       // speed-limit lines across the lane, commitment line (solid yellow) and the exit blend line
-      seg(PO, PI, bA - 4 / geom.L, bA - 2 / geom.L, PAL[9]); seg(PO, PI, bB + 2 / geom.L, bB + 4 / geom.L, PAL[9]);
-      const pre = isRoad ? 0.008 : 0.025; seg(-hw - 1, -hw + 1.5, ps - pre, ps + z.boxA * 0.45, PAL[8]); seg(-hw - 1, -hw + 1.5, bB + (z.range - z.boxB) * 0.5, pe + (isRoad ? 0.006 : 0.02), PAL[8]);
+      qseg(PO, PI, bA - 4 / geom.L, bA - 2 / geom.L, PAL[9]); qseg(PO, PI, bB + 2 / geom.L, bB + 4 / geom.L, PAL[9]);
+      const pre = isRoad ? 0.008 : 0.025; qseg(-hw - 1, -hw + 1.5, ps - pre, ps + z.boxA * 0.45, PAL[8]); qseg(-hw - 1, -hw + 1.5, bB + (z.range - z.boxB) * 0.5, pe + (isRoad ? 0.006 : 0.02), PAL[8]);
       pitInfo.push({ z, bA, bB });
     });
     // infield garages behind pit road on ovals with room for them
@@ -96,10 +117,12 @@ const Renderer = (() => {
     if (isRoad && !street) {
       for (let i = 0; i < 400; i++) { const f0 = i / 400, f1 = (i + 0.5) / 400; if (geom.inPitZone(f0)) continue; seg(hw - 1, hw + 4, f0, f1, PAL[14]); seg(-hw - 4, -hw + 1, f0, f1, PAL[14]); }
     }
+    // v1.5 street courses: red/white curbs on the inside of each corner
+    if (city) { const Lo = Street.layout(geom); for (const [f, sg] of Lo.curbs) seg(sg * (hw - 5), sg * (hw - 1), f, f + 1.6 / geom.L, ((f * geom.L / 6) | 0) % 2 ? PAL[14] : PAL[9]); }
     // start/finish checkers
     const sq = 5; const nSq = Math.ceil(hw * 2 / sq);
     for (let r = 0; r < 2; r++) for (let k = 0; k < nSq; k++) seg(-hw + k * sq, -hw + (k + 1) * sq, r * sq / geom.L, (r + 1) * sq / geom.L, (r + k) % 2 ? PAL[13] : PAL[9]);
-    quantize(x, W, H);
+    quantize(x, W, H, city ? PALRGB_ST : null);
     // asphalt noise
     const id = x.getImageData(0, 0, W, H), d = id.data; const a2 = U.hexToRgb(PAL[3]), a1 = U.hexToRgb(PAL[2]);
     const blk = s >= 0.8 ? 2 : 1;
@@ -109,29 +132,32 @@ const Renderer = (() => {
       }
     }
     x.putImageData(id, 0, 0);
+    if (city) Street.drawTop(x, geom, s);
     // crowd on the seat rows of every tier (aisles and stairs stay clear)
     const rowStep = Math.max(2.4, 2.4 / s), stepF = Math.max(1.5, 2.5 / s) / geom.L; const dot = Math.max(1, Math.round(s * 1.6));
     for (const [f0, span, a, b] of tiers) {
-      for (let f = 0; f < span; f += stepF) for (let o = a + 1; o < b - 0.5; o += rowStep) {
+      const lo = Math.min(a, b), hi = Math.max(a, b);
+      for (let f = 0; f < span; f += stepF) for (let o = lo + 1; o < hi - 0.5; o += rowStep) {
         if (Math.random() < 0.72) { const p = geom.pos(f0 + f, o); x.fillStyle = CROWD[(Math.random() * CROWD.length) | 0]; x.fillRect(Math.round(p.x * s), Math.round(p.y * s), dot, dot); } } }
     // band of suite windows along the back of the main stand
     for (const [f0, span, , b, suites] of tiers) if (suites) { const w = Math.max(1, Math.round(2 * s));
-      for (let f = 0; f < span; f += Math.max(4, 3 / s) / geom.L) { const p = geom.pos(f0 + f, b - 2); x.fillStyle = (f * geom.L / 4 | 0) % 3 ? '#2f6fb3' : '#9cd3ff'; x.fillRect(Math.round(p.x * s), Math.round(p.y * s), w, w); } }
+      for (let f = 0; f < span; f += Math.max(4, 3 / s) / geom.L) { const p = geom.pos(f0 + f, b - 2 * Math.sign(b)); x.fillStyle = (f * geom.L / 4 | 0) % 3 ? '#2f6fb3' : '#9cd3ff'; x.fillRect(Math.round(p.x * s), Math.round(p.y * s), w, w); } }
     const V = DATA.venue(geom.id);
     // press box / suites tower over the start/finish line (on top of the main stand; Indy's Pagoda sits in the infield)
     if (V.press) {
       const main = stands.find(([f0, f1]) => sideOf(f0, f1).main); const dep = main ? main[2] : 30; const inside = V.press === 'inside';
-      const half = Math.min(isRoad ? 70 : 120, geom.L * 0.03) / geom.L; const a = inside ? -hw - 70 : hw + 16 + dep - 8, b = inside ? -hw - 100 : hw + 16 + dep + (isRoad ? 14 : 20);
+      const half = Math.min(isRoad ? 70 : 120, geom.L * 0.03) / geom.L; const a = Q(inside ? -hw - 70 : hw + 16 + dep - 8), b = Q(inside ? -hw - 100 : hw + 16 + dep + (isRoad ? 14 : 20));
+      const SG = Math.sign(b - a) || 1;
       const box = (o1, o2, f0, f1, col) => { const P = [pt(f0, o1), pt(f1, o1), pt(f1, o2), pt(f0, o2)]; x.fillStyle = col; x.beginPath(); x.moveTo(P[0][0], P[0][1]); for (const q of P) x.lineTo(q[0], q[1]); x.closePath(); x.fill(); };
-      box(a, b + (inside ? -3 : 3), -half + 3 / geom.L, half + 3 / geom.L, '#1b1b1b'); // shadow
-      box(a, b, -half, half, '#d8d8d8'); box(a, a + (inside ? -5 : 5), -half, half, '#2f6fb3');
-      for (let f = -half; f < half; f += Math.max(5, 3 / s) / geom.L) box(a + (inside ? -1 : 1), a + (inside ? -3 : 3), f, f + 2 / geom.L, '#9cd3ff');
-      const th = half * 0.35; box(a + (inside ? -8 : 8), b - (inside ? -4 : 4), -th, th, '#f4f4f4'); box(a + (inside ? -8 : 8), a + (inside ? -12 : 12), -th, th, '#2f6fb3');
+      box(a, b + (SG * 3), -half + 3 / geom.L, half + 3 / geom.L, '#1b1b1b'); // shadow
+      box(a, b, -half, half, '#d8d8d8'); box(a, a + (SG * 5), -half, half, '#2f6fb3');
+      for (let f = -half; f < half; f += Math.max(5, 3 / s) / geom.L) box(a + (SG * 1), a + (SG * 3), f, f + 2 / geom.L, '#9cd3ff');
+      const th = half * 0.35; box(a + (SG * 8), b - SG * 4, -th, th, '#f4f4f4'); box(a + (SG * 8), a + (SG * 12), -th, th, '#2f6fb3');
       if (inside) { const p = pt(0, b - 4); x.fillStyle = '#c4232b'; x.fillRect(Math.round(p[0]), Math.round(p[1] - Math.max(3, 8 * s)), Math.max(1, Math.round(2 * s)), Math.max(3, Math.round(8 * s))); }
     }
     // war wagons (crew carts) behind the pit wall, one per box, in team colors
     if (s >= 0.45) for (const { z, bA, bB } of pitInfo) for (let i = 0; i < z.n; i++) {
-      const f = bA + (bB - bA) * (i + 0.5) / z.n, w = Math.min(z.boxLen * 0.6, 14) / geom.L / 2; const p = pt(f, -hw - 67), q = pt(f, -hw - 73);
+      const f = bA + (bB - bA) * (i + 0.5) / z.n, w = Math.min(z.boxLen * 0.6, 14) / geom.L / 2; const p = pt(f, Q(-hw - 67)), q = pt(f, Q(-hw - 73));
       x.save(); x.translate((p[0] + q[0]) / 2, (p[1] + q[1]) / 2); x.rotate(geom.pos(f, 0).a); const L2 = w * geom.L * s;
       x.fillStyle = '#2f2f2f'; x.fillRect(-L2, -3 * s, L2 * 2, 6 * s); x.fillStyle = CROWD[i % CROWD.length]; x.fillRect(-L2, -3 * s, L2 * 2, 2 * s);
       x.fillStyle = '#f4f4f4'; x.fillRect(-L2 * 0.6, 4.5 * s, Math.max(1, s * 1.5), Math.max(1, s * 1.5)); x.fillRect(L2 * 0.4, 4.5 * s, Math.max(1, s * 1.5), Math.max(1, s * 1.5)); x.restore(); }

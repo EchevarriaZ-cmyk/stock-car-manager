@@ -11,7 +11,7 @@ const DATA = (() => {
       purseWin: 75000, sponsorPrimary: 30000, sponsorAssoc: 7500, salaryBase: 2.5, minBudget: 600000, path: 'nascar', rank: 1, facMul: 1.8, model: 'truck', promoPos: 5, promoWins: 2 },
     { id: 'oreilly', name: "O'REILLY SERIES", short: "O'REILLY", cars: 28, mult: 6, aiCar: [54, 76], aiDrv: [52, 78], floor: 54, buyIn: 1500000,
       purseWin: 180000, sponsorPrimary: 72000, sponsorAssoc: 18000, salaryBase: 6, minBudget: 1500000, path: 'nascar', rank: 2, facMul: 2.6, model: 'oreilly', promoPos: 5, promoWins: 2 },
-    { id: 'cup', name: 'CUP SERIES', short: 'CUP', cars: 32, mult: 15, aiCar: [64, 88], aiDrv: [62, 90], floor: 64, buyIn: 5000000,
+    { id: 'cup', name: 'CUP SERIES', short: 'CUP', cars: 40, charters: 36, openExtra: 2, mult: 15, aiCar: [64, 88], aiDrv: [62, 90], floor: 64, buyIn: 5000000,
       purseWin: 450000, sponsorPrimary: 180000, sponsorAssoc: 45000, salaryBase: 15, minBudget: 4000000, path: 'nascar', rank: 3, facMul: 3.4, model: 'cup', top: true },
     { id: 'kart', name: 'REGIONAL KART SERIES', short: 'KARTS', cars: 16, mult: 0.2, aiCar: [14, 33], aiDrv: [14, 42], floor: 18, buyIn: 0,
       purseWin: 2500, sponsorPrimary: 1500, sponsorAssoc: 400, salaryBase: 0.2, minBudget: 30000, path: 'kart', rank: -1, entry: true, facMul: 0.15, model: 'kart', kart: true },
@@ -85,7 +85,7 @@ const DATA = (() => {
     atlanta: { name: 'ATLANTA MOTOR SPEEDWAY', short: 'ATLANTA', type: 'superspeedway', miles: 1.54, bank: 28, city: 'Hampton, GA', note: '1.54-MILE QUAD-OVAL, PACK DRAFTING',
       shape: RP([[470, 430, 500], [700, 380, 170], [700, 0, 170], [0, 0, 170], [0, 380, 170], [230, 430, 500]]) },
     charlotte: { name: 'CHARLOTTE MOTOR SPEEDWAY', short: 'CHARLOTTE', type: 'intermediate', miles: 1.5, bank: 24, city: 'Concord, NC', note: '1.5-MILE QUAD-OVAL',
-      shape: RP([[520, 470, 500], [760, 410, 190], [760, 0, 190], [0, 0, 190], [0, 410, 190], [240, 470, 500]]) },
+      shape: RP([[810, 470, 500], [1050, 410, 190], [1050, 0, 190], [0, 0, 190], [0, 410, 190], [240, 470, 500]]) }, // v1.6: a longer, flatter frontstretch (closer to the real quad-oval) so 40 Cup pit boxes fit
     lasvegas: { name: 'LAS VEGAS MOTOR SPEEDWAY', short: 'LAS VEGAS', type: 'intermediate', miles: 1.5, bank: 20, city: 'Las Vegas, NV', note: '1.5-MILE TRI-OVAL',
       shape: RP([[800, 400, 190], [800, 0, 190], [0, 0, 190], [0, 400, 190], [400, 455, 1300]], { sf: 4, xs: 1.06 }) },
     kansas: { name: 'KANSAS SPEEDWAY', short: 'KANSAS', type: 'intermediate', miles: 1.5, bank: 20, city: 'Kansas City, KS', note: '1.5-MILE TRI-OVAL',
@@ -138,7 +138,9 @@ const DATA = (() => {
     roval: { name: 'CHARLOTTE ROVAL', short: 'ROVAL', type: 'road', miles: 2.28, bank: 0, city: 'Concord, NC', note: '2.28-MILE ROAD COURSE IN AND AROUND THE OVAL',
       shape: { kind: 'road', pts: [[0, 0], [560, 0], [760, -60], [820, -220], [700, -330], [520, -280], [420, -360], [260, -300], [300, -200], [120, -170], [-80, -260], [-180, -140], [-140, -30]] } },
     chicago: { name: 'CHICAGO STREET COURSE', short: 'CHICAGO', type: 'road', street: true, miles: 2.2, bank: 0, city: 'Chicago, IL', note: '2.2-MILE GRANT PARK STREET COURSE',
-      shape: { kind: 'road', pts: [[0, 0], [640, 0], [700, -60], [700, -200], [600, -240], [600, -380], [420, -380], [380, -300], [200, -300], [160, -200], [-40, -200], [-80, -100]] } },
+      shape: { kind: 'rp', cw: true, // v1.5: Grant Park (map with the lake on top): Columbus Dr start, Balbo, DuSable Lake Shore Dr, Roosevelt, Columbus, Balbo, Michigan Ave + Congress Plaza, Jackson
+        v: [[470, 375, 32], [470, 182, 32], [775, 182, 140], [912, 290, 40], [912, 375, 32], [545, 375, 32], [545, 585, 32], [380, 585, 32], [275, 520, 90], [170, 585, 32],
+          [70, 585, 32], [70, 375, 32]] } },
     mexico: { name: 'AUTODROMO HERMANOS RODRIGUEZ', short: 'MEXICO CITY', type: 'road', miles: 2.42, bank: 0, city: 'Mexico City, MX', note: '2.42-MILE CIRCUIT THROUGH THE STADIUM',
       shape: { kind: 'road', pts: [[0, 0], [900, 0], [980, -70], [900, -150], [760, -160], [640, -240], [440, -220], [360, -300], [180, -280], [60, -200], [-40, -220], [-120, -120]] } },
     limerock: { name: 'LIME ROCK PARK', short: 'LIME ROCK', type: 'road', miles: 1.53, bank: 0, city: 'Lakeville, CT', note: '1.53-MILE SHORT, FAST ROAD COURSE',
@@ -160,21 +162,28 @@ const DATA = (() => {
       shape: { kind: 'road', pts: [[0, 0], [360, 0], [460, 60], [380, 140], [240, 150], [200, 240], [330, 300], [520, 260], [620, 120], [740, 100], [760, 300], [640, 440], [380, 470], [140, 440], [-20, 360], [-60, 200], [-40, 80]] } },
     // ---------- v1.3: Road to IndyCar tracks (names only; layouts roughly the real shapes) ----------
     stpete: { name: 'STREETS OF ST. PETERSBURG', short: 'ST. PETE', type: 'road', street: true, miles: 1.8, bank: 0, city: 'St. Petersburg, FL', note: '1.8-MILE STREET COURSE, AIRPORT RUNWAY',
-      shape: { kind: 'road', pts: [[0, 0], [700, 0], [760, -60], [760, -220], [700, -280], [420, -280], [380, -360], [200, -360], [160, -300], [-60, -300], [-120, -220], [-120, -60]] } },
+      shape: { kind: 'rp', cw: true, pitRight: true, sfT: 0.52, // v1.5: traced from the official map (runway front straight, T1-T3 onto Bayshore, the T4-T9 notch round Pioneer Park, T10 at the Dali)
+        v: [[752, 412, 34], [650, 440, 34], [615, 515, 50], [410, 522, 32], [410, 455, 32], [330, 455, 32], [322, 522, 32], [245, 522, 34], [245, 375, 34], [420, 375, 80],
+          [510, 318, 32], [492, 215, 32], [506, 175, 32], [440, 45, 40], [575, 25, 40]] } },
     longbeach: { name: 'STREETS OF LONG BEACH', short: 'LONG BEACH', type: 'road', street: true, miles: 1.968, bank: 0, city: 'Long Beach, CA', note: '1.97-MILE STREET COURSE, FAMOUS HAIRPIN',
-      shape: { kind: 'road', pts: [[0, 0], [600, 0], [760, -40], [860, -160], [840, -260], [700, -300], [560, -260], [500, -330], [360, -330], [320, -250], [140, -250], [100, -180], [-60, -170], [-120, -120], [-140, -40], [-100, 20]] } },
+      shape: { kind: 'rp', cw: true, pitRight: true, sfT: 0.3, pitAt: 0.52, // v1.5: Shoreline Dr front straight, T1 left at Aquarium Way, the fountain, Pine Ave, Seaside Way, the T11 hairpin
+        v: [[232, 512, 34], [220, 640, 34], [120, 655, 60], [25, 640, 32], [25, 350, 34], [395, 352, 34], [382, 232, 36], [300, 150, 32], [775, 40, 32], [825, 140, 34],
+          [975, 140, 42], [975, 225, 42], [880, 228, 160], [800, 425, 200]] } },
     barber: { name: 'BARBER MOTORSPORTS PARK', short: 'BARBER', type: 'road', miles: 2.38, bank: 0, city: 'Birmingham, AL', note: '2.38-MILE ROLLING ROAD COURSE',
       shape: { kind: 'road', pts: [[0, 0], [480, 0], [640, -80], [660, -240], [560, -330], [600, -460], [760, -500], [880, -400], [860, -220], [960, -120], [940, 60], [780, 150], [560, 130], [400, 220], [200, 230], [60, 140]] } },
     indyroad: { name: 'INDIANAPOLIS ROAD COURSE', short: 'INDY ROAD', type: 'road', miles: 2.439, bank: 0, city: 'Indianapolis, IN', note: '2.44-MILE ROAD COURSE INSIDE THE BRICKYARD',
       shape: { kind: 'road', pts: [[0, 0], [700, 0], [820, -60], [820, -200], [700, -240], [600, -180], [500, -240], [380, -200], [300, -280], [120, -300], [40, -220], [100, -140], [0, -100], [-80, -40]] } },
     detroit: { name: 'DETROIT STREET CIRCUIT', short: 'DETROIT', type: 'road', street: true, miles: 1.645, bank: 0, city: 'Detroit, MI', note: '1.65-MILE DOWNTOWN STREET COURSE',
-      shape: { kind: 'road', pts: [[0, 0], [520, 0], [600, -60], [600, -180], [520, -220], [460, -300], [300, -300], [260, -220], [100, -220], [40, -280], [-80, -260], [-100, -120], [-60, -40]] } },
+      shape: { kind: 'rp', sfT: 0.377, splitPit: true, // v1.5: 2023 downtown layout, map turned so Jefferson Ave runs flat (start on Jefferson, T3 hairpin, Bates, Atwater by the river, St. Antoine, Franklin)
+        v: [[-60, 266, 41], [-60, 350, 41], [100, 350, 32], [104, 485, 32], [190, 484, 30], [228, 522, 30], [523, 529, 32], [522, 419, 32], [848, 422, 32], [866, 266, 34]] } },
     roadamerica: { name: 'ROAD AMERICA', short: 'ROAD AMERICA', type: 'road', miles: 4.014, bank: 0, city: 'Elkhart Lake, WI', note: '4.0-MILE CLASSIC ROAD COURSE',
       shape: { kind: 'road', pts: [[0, 0], [600, 0], [760, -40], [820, -220], [760, -420], [600, -480], [520, -380], [380, -360], [300, -460], [120, -500], [0, -420], [20, -300], [-100, -220], [-120, -80]] } },
     midohio: { name: 'MID-OHIO SPORTS CAR COURSE', short: 'MID-OHIO', type: 'road', miles: 2.258, bank: 0, city: 'Lexington, OH', note: '2.26-MILE TWISTY ROAD COURSE',
       shape: { kind: 'road', pts: [[0, 0], [420, 0], [520, -80], [480, -200], [600, -300], [760, -260], [800, -120], [920, -60], [900, 100], [700, 160], [520, 120], [380, 200], [180, 200], [40, 120]] } },
     toronto: { name: 'STREETS OF TORONTO', short: 'TORONTO', type: 'road', street: true, miles: 1.786, bank: 0, city: 'Toronto, ON', note: '1.79-MILE EXHIBITION PLACE STREETS',
-      shape: { kind: 'road', pts: [[0, 0], [640, 0], [700, -80], [640, -160], [440, -160], [400, -240], [160, -240], [120, -160], [-40, -160], [-100, -80]] } },
+      shape: { kind: 'rp', cw: true, sfT: 0.62, // v1.5: Exhibition Place - Princes' Blvd start, T1 by the Princes' Gates, Lake Shore Blvd, T3 at Ontario Dr, round BMO Field
+        v: [[835, 222, 34], [858, 292, 60], [760, 385, 200], [520, 495, 300], [205, 566, 40], [212, 470, 50], [200, 385, 32], [62, 398, 34], [165, 190, 34], [283, 150, 32],
+          [318, 238, 32], [398, 250, 34], [482, 332, 34]] } },
     portland: { name: 'PORTLAND INTERNATIONAL RACEWAY', short: 'PORTLAND', type: 'road', miles: 1.964, bank: 0, city: 'Portland, OR', note: '1.96-MILE FLAT ROAD COURSE',
       shape: { kind: 'road', pts: [[0, 0], [900, 0], [980, -60], [940, -140], [600, -170], [520, -230], [300, -230], [200, -160], [40, -170], [-60, -100]] } },
     nola: { name: 'NOLA MOTORSPORTS PARK', short: 'NOLA', type: 'road', miles: 2.75, bank: 0, city: 'Avondale, LA', note: '2.75-MILE FLAT ROAD COURSE',
@@ -200,8 +209,10 @@ const DATA = (() => {
     phoenix: [FS(0.12, 70)], richmond: [FS(0.17, 70), [0.37, 0.63, 38]], bristol: [[0, 1, 66]], martinsville: [FS(0.2, 64), [0.32, 0.68, 46]],
     iowa: [FS(0.15, 62), [0.36, 0.64, 30]], elko: [FS(0.14, 40)], toledo: [FS(0.14, 40)], berlin: [FS(0.14, 40)], salem: [FS(0.15, 44)],
     lucasoil: [FS(0.15, 44)], nhms: [FS(0.15, 66), [0.38, 0.62, 30]], rockingham: [FS(0.14, 56)], nwilkesboro: [FS(0.16, 52), [0.4, 0.6, 30]],
-    cota: [FS(0.05, 56)], roval: [FS(0.06, 70)], chicago: [FS(0.06, 50)], mexico: [FS(0.05, 70)], limerock: [FS(0.04, 36)], thermal: [FS(0.04, 30)], gateway: [FS(0.12, 58)], nashville: [FS(0.14, 66)], milwaukee: [FS(0.14, 58)],
-    watkinsglen: [FS(0.05, 54)], sonoma: [FS(0.05, 44)], roadamerica: [FS(0.04, 50)], indyroad: [FS(0.05, 80)], longbeach: [FS(0.06, 60)], stpete: [FS(0.06, 56)],
+    cota: [FS(0.05, 56)], roval: [FS(0.06, 70)], chicago: [FS(0.06, 56), [0.528, 0.562, 34]], mexico: [FS(0.05, 70)], limerock: [FS(0.04, 36)], thermal: [FS(0.04, 30)], gateway: [FS(0.12, 58)], nashville: [FS(0.14, 66)], milwaukee: [FS(0.14, 58)],
+    watkinsglen: [FS(0.05, 54)], sonoma: [FS(0.05, 44)], roadamerica: [FS(0.04, 50)], indyroad: [FS(0.05, 80)], longbeach: [FS(0.06, 60), [0.815, 0.875, 44]], stpete: [FS(0.06, 56), [0.085, 0.13, 40], [0.22, 0.29, 30]],
+    // v1.5 street circuits: main straight + the key corners (4th value -1 = on the pit-road side of the track)
+    detroit: [FS(0.06, 56), [0.235, 0.3, 44], [0.48, 0.58, 30]], toronto: [FS(0.055, 56), [0.435, 0.475, 40, -1], [0.862, 0.905, 30]],
   };
   // infield lakes (Daytona's Lake Lloyd, Talladega's infield lake): [share of a lap, inward offset]
   const LAKES = { daytona: [0.5, 190], talladega: [0.55, 170] };
@@ -428,7 +439,7 @@ const DATA = (() => {
   const POINTS = [40, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
   const XP_PER_LEVEL = 120;
   // ---------- v1.1 ----------
-  const VERSION = '1.4';
+  const VERSION = '1.6';
   // Driver stats shown on cards (aggression is a style: more passes, more wrecks)
   const DRIVER_STATS = [
     ['speed', 'SPEED', 'RAW PACE. THE BIGGEST PART OF LAP TIME.'],
@@ -483,6 +494,27 @@ const DATA = (() => {
     ['indyChamp', 'INDYCAR CHAMPION', 'big', 'gold', 'WIN THE INDYCAR SERIES CHAMPIONSHIP.'],
   ];
   const CHANGELOG = [
+    { v: '1.6', date: 'NOV 24, 2026', title: "OWNER'S BOX", items: [
+      'NEW BUSINESS BUTTON ON THE HUB (NEXT TO FREE MODE): CHARTERS, RIVAL OWNERS AND MANUFACTURER DEALS IN ONE PLACE. YOU ARE STILL THE OWNER / MANAGER, NEVER THE DRIVER.',
+      'CUP CHARTERS: THE CUP SERIES HAS 36 CHARTERS AND A 40-CAR FIELD. A CHARTERED CAR IS GUARANTEED A STARTING SPOT AND GETS A 30% BIGGER SHARE OF THE PURSE. OPEN CARS RACE IN ON QUALIFYING SPEED - ONLY 4 OPEN SPOTS, SO SOME OPEN CARS GO HOME (DID NOT QUALIFY: NO PURSE, BILLS STILL DUE).',
+      'THE CHARTER MARKET: BUY A CHARTER FROM A RIVAL OWNER, SELL ONE, LEASE ONE IN FOR THE REST OF THE SEASON, OR LEASE YOURS OUT FOR CASH. CHARTER VALUES RISE AND FALL WEEK TO WEEK, JUMP BETWEEN SEASONS, AND YOUR OWN CHARTER IS WORTH MORE WHEN YOUR TEAM RUNS WELL. YOU CAN BUY ONE AS EARLY AS THE O\'REILLY SERIES. THE CUP BUY-IN STILL GETS YOU IN AS AN OPEN TEAM, AND LEASING KEEPS CUP AFFORDABLE.',
+      'RIVAL OWNERS: FOUR AI OWNERS (VANCE KOLBY, DELIA MARCHETTI, HOLT BRANNIGAN AND REGGIE OKAFOR) TRY TO POACH YOUR DRIVERS AND YOUR NEW CREW CHIEF - MOSTLY WHEN A CONTRACT IS IN ITS LAST YEAR OR THE DRIVER IS RUNNING WELL. YOU GET A NEWS ALERT: COUNTER (A BIDDING WAR OF UP TO 3 ROUNDS) OR LET THEM GO. HAPPY, LOYAL DRIVERS ARE EASIER TO KEEP. RIVALS ALSO BID FOR THE PROSPECTS YOU SCOUT.',
+      'CREW CHIEF: EVERY TEAM NOW HAS A CREW CHIEF. A GOOD ONE MAKES PIT STOPS A LITTLE QUICKER. LOSE YOURS AND SOMEONE FROM THE SHOP STEPS UP.',
+      'MANUFACTURER DEALS: CHEVROLET, FORD OR TOYOTA IN NASCAR, HONDA OR CHEVROLET ENGINES IN INDYCAR (THE JUNIOR OPEN-WHEEL SERIES USE SPEC ENGINES). OFFERS COME WITH REP AND RESULTS: CASH EVERY RACE AND AN ENGINE BOOST, WITH GOALS LIKE TOP-10 FINISHES OR A WIN. HIT THEM AND THE NEXT DEAL GETS BETTER; MISS THEM AND IT SHRINKS OR ENDS. ONE MAKE AT A TIME - SWITCHING COSTS MONEY. YOUR MAKE SHOWS AS A BADGE ON THE HUB.',
+      'CHARLOTTE GETS A LONGER, FLATTER FRONTSTRETCH SO THE 40-CAR CUP PIT ROAD FITS.',
+      'SAVES FROM V1.0 TO V1.5 STILL LOAD. A CUP TEAM FROM AN OLDER SAVE KEEPS RACING WITH A CHARTER.',
+    ] },
+    { v: '1.5', date: 'NOV 24, 2026', title: 'STREET FIGHT', items: [
+      'THE 5 STREET CIRCUITS NOW LOOK LIKE THE REAL ONES: ST. PETE, LONG BEACH, DETROIT, TORONTO AND CHICAGO ARE TRACED FROM THE REAL MAPS WITH THE RIGHT NUMBER OF TURNS, IN THE RIGHT ORDER, RUNNING THE RIGHT WAY ROUND.',
+      'ST. PETE (14 TURNS): THE LONG FRONT STRAIGHT ON THE ALBERT WHITTED AIRPORT RUNWAY (WITH RUNWAY MARKINGS), THE SHARP TURN 1 RIGHT-HANDER, THE BAYSHORE BACK STRAIGHT, THE TWISTY BIT ROUND PIONEER PARK, TURN 10 BY THE DALI MUSEUM, THE BAY AND A MARINA.',
+      'LONG BEACH (11 TURNS): THE CURVING SHORELINE DRIVE FRONT STRAIGHT, TURN 1 AND THE FOUNTAIN, PINE AVENUE, SEASIDE WAY PAST THE CONVENTION CENTER AND ARENA, THE FAMOUS TIGHT TURN 11 HAIRPIN, THE HARBOR AND THE AQUARIUM.',
+      'DETROIT (9 TURNS, 2023 DOWNTOWN LAYOUT): THE LONG JEFFERSON AVENUE STRAIGHT WITH A SPLIT PIT LANE IN THE MEDIAN (BOXES ON BOTH SIDES), THE TURN 3 HAIRPIN, THE RIVERFRONT, THE RENAISSANCE CENTER TOWERS AND HUNTINGTON PLACE.',
+      'TORONTO (11 TURNS): PRINCES\' BOULEVARD AND THE PRINCES\' GATES, THE LAKE SHORE BOULEVARD STRAIGHT, THE TURN 3 HAIRPIN, BMO FIELD, EXHIBITION PLACE AND LAKE ONTARIO.',
+      'CHICAGO (12 TURNS): COLUMBUS DRIVE, BALBO, DUSABLE LAKE SHORE DRIVE, MICHIGAN AVENUE AND CONGRESS PLAZA THROUGH GRANT PARK, WITH BUCKINGHAM FOUNTAIN, THE FIELD MUSEUM, LAKE MICHIGAN AND THE SKYLINE.',
+      'CITY SCENERY: BLOCKS OF BUILDINGS WITH ROOFTOPS (DIFFERENT HEIGHTS AND COLOURS, AC UNITS, WATER TOWERS, SOLAR PANELS, ROOF GARDENS, HELIPADS), CONCRETE WALLS AND CATCH FENCING, TIRE BARRIERS AT THE HAIRPINS, CURBS IN THE CORNERS, AND THE PADDOCK BEHIND PIT ROAD.',
+      'TIERED GRANDSTANDS ALONG THE MAIN STRAIGHT AND AT THE KEY CORNERS. STREETS ARE A LITTLE NARROWER THAN ROAD COURSES, AND PIT ROAD STAYS ON THE START/FINISH STRAIGHT.',
+      'THE CARS ALWAYS DRAW ON TOP OF THE SCENERY, SO NOTHING HIDES THE RACING. SAVES CARRY OVER.',
+    ] },
     { v: '1.4', date: 'NOV 24, 2026', title: 'RACE DAY', items: [
       'NEW RACE SCREEN: THE TRACK NOW FILLS THE WHOLE SCREEN, WITH SLIM SEE-THROUGH TV GRAPHICS ON TOP. A THIN TOP BAR (FLAG, LAP X/Y, STAGE), A LEADERBOARD ON THE LEFT (POSITION, TEAM COLORS, CAR NUMBER, 3-LETTER NAME, INTERVAL, UP/DOWN ARROWS, PIT TAGS - YOUR CAR SAYS YOU) THAT HIDES WITH A TAP, AND A SMALL PIT-WALL STRIP ON THE RIGHT.',
       'TV GRAPHICS: A START GRAPHIC WITH STARTING LIGHTS, GREEN FLAG / RESTART / WHITE FLAG / STAGE SPLASHES, A CAUTION BANNER THAT SLAMS IN AND THEN SHRINKS TO A STRIP, "CAUTION - FIELD FROZEN" ON THE LEADERBOARD, A LIVE PIT-STOP TIMER, BATTLE FOR THE LEAD, FASTEST LAP, AND A WAVING CHECKERED FLAG AT THE FINISH.',

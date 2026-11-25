@@ -7,19 +7,26 @@ class TrackGeom {
     const sh = def.shape;
     let pts = [];
     if (sh.kind === 'oval' || sh.kind === 'trioval') pts = this._oval(sh.straight, sh.r, sh.kind === 'trioval' ? sh.bump : 0);
-    else if (sh.kind === 'rp') pts = this._rpoly(sh.xs ? sh.v.map(([x, y, r]) => [x * sh.xs, y, r]) : sh.v, sh.sf); // v1.4: xs lengthens the straights
+    else if (sh.kind === 'rp') pts = this._rpoly(sh.xs ? sh.v.map(([x, y, r]) => [x * sh.xs, y, r]) : sh.v, sh.sf, sh.cw, sh.sfT); // v1.4: xs lengthens the straights
+    // v1.5: street circuits are rounded polygons traced from the real maps; cw = the real track runs clockwise on its map
     else pts = this._road(sh.pts);
     // v1.2: scale every layout to its real lap length (compressed so short tracks still fit the screen)
-    if (def.miles) { const target = this.T.perim; let per = 0; for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; per += Math.hypot(b[0] - a[0], b[1] - a[1]); } const k = target / per; pts = pts.map(([x, y]) => [x * k, y * k]); }
+    if (def.miles) { const target = this.T.perim; let per = 0; for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; per += Math.hypot(b[0] - a[0], b[1] - a[1]); } const k = target / per; this.k = k; pts = pts.map(([x, y]) => [x * k, y * k]); }
+    if (!this.k) this.k = 1;
     this._resample(pts, 3);
     // widths & lanes
     if (this.type === 'superspeedway') { this.hw = 46; this.lanes = [-24, 0, 24]; }
+    else if (def.street) { this.hw = 26; this.lanes = [-10, 10]; } // v1.5: narrower city streets
     else if (this.type === 'road') { this.hw = 30; this.lanes = [-10, 10]; }
     else { this.hw = 36; this.lanes = [-14, 12]; }
     // Pit road. v1.4 ovals: the pit boxes sit on the frontstretch only, like the real intermediates and superspeedways
     // (Bristol and Martinsville split them between the front and back straights, like the real ones). The entry lane
     // leaves the apron in turn 3-4, the exit lane rejoins in turn 1-2, and boxes never run into the turns.
-    this.pitLat = -(this.hw + 31); this.boxLat = -(this.hw + 51);
+    // v1.5: side = which side of the track pit road is on (-1 = left of travel, the v1.4 default; +1 = right, like St. Pete
+    // and Long Beach). split = Detroit's pit lane in the Jefferson Ave median with boxes on both sides of the fast lane.
+    this.side = sh.pitRight ? 1 : -1; this.split = !!sh.splitPit;
+    this.pitLat = this.side * (this.hw + 31); this.boxLat = this.side * (this.hw + 51);
+    if (this.split) { this.pitLat = this.side * (this.hw + 40); this.boxLat = this.side * (this.hw + 56); this.boxLat2 = this.side * (this.hw + 24); }
     const nCars = seriesIdx !== undefined && seriesIdx !== null && DATA.SERIES[seriesIdx] ? DATA.SERIES[seriesIdx].cars : 32; this.nBoxes = nCars;
     const L = this.L; const ds = L / this.M; this.zones = [];
     if (this.type !== 'road' && sh.kind === 'rp') {
@@ -40,8 +47,10 @@ class TrackGeom {
       if (sh.kind === 'rp' || (sh.kind === 'road' && def.miles)) halfStraight = this._straightHalf(sh.kind === 'road' ? 0.35 : 0.3);
       else halfStraight = sh.kind === 'road' ? Math.hypot(sh.pts[1][0] - sh.pts[0][0], sh.pts[1][1] - sh.pts[0][1]) * 0.45 : sh.straight / 2 * 0.95;
       if (def.kart) { zone = Math.min(0.17 * L, nCars * 18); entry = 26; exit = 30; } // karts: a pit / grid lane along the main straight
+      else if (def.street) { const rows = this.split ? Math.ceil(nCars / 2) : nCars; zone = Math.max(150, Math.min(0.13 * L, rows * (this.split ? 22 : 11.5))); entry = 55; exit = 60; } // v1.5: tight street pit lanes stay on the main straight
       else { zone = Math.min(0.22 * L, Math.max(halfStraight * 1.6, nCars * 22)); entry = Math.max(40, halfStraight * 0.2); exit = Math.max(50, halfStraight * 0.25); }
-      const z = { n: nCars, start: 1 - (zone * 0.5 + entry) / L, boxA: entry / L, boxB: (entry + zone) / L }; z.range = (zone + entry + exit) / L; z.boxLen = zone / nCars;
+      const nb = this.split ? Math.ceil(nCars / 2) : nCars; const sfT = def.street && sh.pitAt !== undefined ? sh.pitAt : 0.5; // pitAt: share of the box row before the line
+      const z = { n: nb, start: 1 - (zone * sfT + entry) / L, boxA: entry / L, boxB: (entry + zone) / L }; z.range = (zone + entry + exit) / L; z.boxLen = zone / nb;
       this.zones.push(z);
     }
     // zone 0 also under the v1.3 names (renderer, tests)
@@ -54,6 +63,8 @@ class TrackGeom {
     this.ox = -minX + m; this.oy = -minY + m;
     for (let i = 0; i < this.M; i++) { this.X[i] += this.ox; this.Y[i] += this.oy; }
     this.W = Math.ceil(maxX - minX + m * 2); this.H = Math.ceil(maxY - minY + m * 2);
+    // v1.5: street circuits get a landscape-shaped city around them so the scenery fills a phone screen
+    if (def.street) { const W2 = Math.max(this.W, Math.ceil(this.H * 1.8)); const dx = Math.round((W2 - this.W) / 2); if (dx > 0) { for (let i = 0; i < this.M; i++) this.X[i] += dx; this.ox += dx; this.W = W2; } }
     this.cx = this.W / 2; this.cy = this.H / 2;
   }
   _oval(S, r, bump) {
@@ -73,7 +84,7 @@ class TrackGeom {
     return Math.max(60, Math.min(walk(1), walk(-1)) * 0.92);
   }
   // rounded polygon: verts [x, y, r]. Start/finish = middle of the last edge, or the arc of vertex sf.
-  _rpoly(V, sf) {
+  _rpoly(V, sf, cw, sfT) {
     const n = V.length; const pts = []; const arcs = [];
     for (let i = 0; i < n; i++) {
       const P = V[(i - 1 + n) % n], C = V[i], N = V[(i + 1) % n];
@@ -91,10 +102,10 @@ class TrackGeom {
     // start index
     let s0;
     if (sf !== undefined) { const [a, b] = arcs[sf]; s0 = Math.round((a + b) / 2); }
-    else { const last = arcs[n - 1][1], first = 0; const A = pts[last], B = pts[first]; pts.push([(A[0] + B[0]) / 2, (A[1] + B[1]) / 2]); s0 = pts.length - 1; }
+    else { const last = arcs[n - 1][1], first = 0; const A = pts[last], B = pts[first]; const t = sfT === undefined ? 0.5 : sfT; pts.push([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t]); s0 = pts.length - 1; }
     let rot = pts.slice(s0).concat(pts.slice(0, s0));
     let area = 0; for (let i = 0; i < rot.length; i++) { const a = rot[i], b = rot[(i + 1) % rot.length]; area += a[0] * b[1] - b[0] * a[1]; }
-    if (area > 0) rot = [rot[0]].concat(rot.slice(1).reverse());
+    if (cw ? area < 0 : area > 0) rot = [rot[0]].concat(rot.slice(1).reverse());
     return rot;
   }
   _road(cp) {
@@ -143,6 +154,10 @@ class TrackGeom {
     const rx = -Math.sin(a), ry = Math.cos(a);
     return { x: x + rx * (lat || 0), y: y + ry * (lat || 0), a };
   }
+  // v1.5: box lateral for a car (Detroit's split pit lane puts every other car on the track side of the fast lane)
+  boxLatFor(c) { return this.split && c && c.pside ? this.boxLat2 : this.boxLat; }
+  // v1.5: map coordinates of a shape vertex (raw design units) -> track units
+  raw(x, y) { return [x * this.k + this.ox, y * this.k + this.oy]; }
   inPitZone(frac) { return this.zones.some((z, i) => this.pitProg(frac, i) <= z.range); }
   pitProg(frac, zi) { const z = this.zones[zi || 0]; return ((frac - z.start) % 1 + 1) % 1; }
   // pit-progress where a box is; st = 0..1 share of the box row (1 = nearest the exit)

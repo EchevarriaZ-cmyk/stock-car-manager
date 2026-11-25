@@ -160,6 +160,7 @@ const UI = (() => {
       <div class="hub-grid2" style="grid-template-rows:${th}px ${th}px">${tiles}</div>
       <div class="botbar pw-bot"><button class="profile-btn" data-act="go" data-arg="profile" aria-label="Profile">${T(pname, pname.length > 8 ? 2 : 3, SH)}<span class="pb-lv">LV ${has ? s.level : 1}<span class="xpbar"><i style="width:${xpPct}%"></i></span></span></button>
         <button class="ticker" data-act="go" data-arg="${has ? 'news' : 'career'}" aria-label="News ticker">${tickerHTML()}</button>
+        <button class="biz-btn" data-act="${has ? 'go' : 'needCareer'}" data-arg="business" aria-label="Business"${has ? KB('b', 'B') : ''}>${has && typeof Biz !== 'undefined' ? Biz.badgeHTML(2) : ''}${T('BUSINESS', 2, SH)}${has && typeof Biz !== 'undefined' && Biz.alerts() ? '<span class="newdot">' + Biz.alerts() + '</span>' : ''}</button>
         <button class="free-btn" data-act="go" data-arg="free" aria-label="Free Mode"${KB('q', 'Q')}>${T('FREE\nMODE', 2, SH)}</button>
         <button class="set-btn" data-act="go" data-arg="settings" aria-label="Settings"${KB('s', 'S')}>${PW.icon('gear', 2)}</button>
         <button class="ver-btn" data-act="go" data-arg="updates" aria-label="Update log">${T('V' + DATA.VERSION, 2, SH)}${seenVersion() !== DATA.VERSION ? '<span class="newdot">NEW</span>' : ''}</button></div></div>`);
@@ -724,18 +725,37 @@ const UI = (() => {
       render(page('PRACTICE - DAY 5', `<div class="cols"><div class="col narrow">${info}</div><div class="col"><div class="panel blue"><div class="small">DRIVER RADIO:</div><div class="ol1">${fb}</div></div>
         <div class="small ol">PICK THE SETUP FOR THE WEEKEND:</div><div class="row">${opt('qual', 'QUALIFY TRIM', 'BETTER STARTING SPOT, SLIGHTLY SLOWER IN THE RACE', 'orange')}${opt('bal', 'BALANCED', 'A LITTLE BIT OF EVERYTHING', 'blue')}${opt('race', 'RACE TRIM', 'STEADIER ON LONG RUNS, FEWER MISTAKES', 'green')}</div></div></div>`));
     } else {
-      const grid = P.grid; const myPos = grid.findIndex(e => e.id === 'P') + 1; const myPos2 = grid.findIndex(e => e.id === 'P2') + 1;
+      const grid = P.grid;
+      // v1.6: an open Cup car can fail to qualify
+      const q = !s.free && typeof Biz !== 'undefined' && s.biz && s.biz.lastQual && s.biz.lastQual.wk === s.season * 100 + s.week && s.seriesIdx === 3 ? s.biz.lastQual : null;
+      if (q && !grid.some(e => e.isPlayer)) return dnqPage(q, info);
+      const myPos = grid.findIndex(e => e.id === 'P') + 1; const myPos2 = grid.findIndex(e => e.id === 'P2') + 1;
       const rowOf = (e, i) => `<div class="list-row ${e.id === 'P' ? 'me' : e.id === 'P2' ? 'me me2' : ''}" style="min-height:30px;cursor:default"><b style="width:22px">${i + 1}</b><span class="tag" style="background:${e.livery.body}">${e.number}</span><span class="grow">${U.esc(e.driverShort)}${e.isPlayer ? ' (YOU)' : ''}</span></div>`;
       const rows = grid.slice(0, 12).map(rowOf).join('') + grid.map((e, i) => [e, i]).filter(([e, i]) => i >= 12 && e.isPlayer).map(([e, i]) => rowOf(e, i)).join('');
       const sb = (k, l) => `<button class="btn ${P.style === k ? 'orange sel' : 'dark'}" style="flex:1" data-act="prepStyle" data-arg="${k}">${l}</button>`;
       const mb = (k, l) => `<button class="btn ${P.mode === k ? 'blue sel' : 'dark'}" style="flex:1" data-act="prepMode" data-arg="${k}">${l}</button>`;
-      render(page('QUALIFYING - DAY 6', `<div class="cols"><div class="col narrow"><div class="panel red" style="text-align:center"><div class="small">YOU QUALIFIED</div><div class="ol" style="font-size:${myPos2 ? 30 : 40}px">P${myPos}${myPos2 ? ' & P' + myPos2 : ''}</div><div class="small">OF ${grid.length}${myPos2 ? ' · #' + s.team.number + ' & #' + s.team.car2.number : ''}</div></div>${info}</div>
+      render(page('QUALIFYING - DAY 6', `<div class="cols"><div class="col narrow"><div class="panel red" style="text-align:center"><div class="small">YOU QUALIFIED</div><div class="ol" style="font-size:${myPos2 ? 30 : 40}px">P${myPos}${myPos2 ? ' & P' + myPos2 : ''}</div><div class="small">OF ${grid.length}${myPos2 ? ' · #' + s.team.number + ' & #' + s.team.car2.number : ''}</div></div>${q ? qualNote(q) : ''}${info}</div>
         <div class="col"><div class="panel"><h3>STRATEGY</h3><div class="small">CREW CHIEF STYLE (USED WHEN YOU SKIP OR AUTO-CALL)</div><div class="row" style="margin:6px 0">${sb('aggressive', 'TRACK POS')}${sb('balanced', 'BALANCED')}${sb('conservative', 'FRESH TIRES')}</div>
           <div class="small">START PACE${myPos2 ? ' (BOTH CARS)' : ''}</div><div class="row" style="margin:6px 0">${mb('push', 'PUSH')}${mb('normal', 'NORMAL')}${mb('save', 'SAVE')}</div>
           <div class="row"><button class="btn ${P.ask ? 'green' : 'dark'}" style="flex:1" data-act="prepAsk">${P.ask ? 'ASK ME ON CAUTIONS: ON' : 'ASK ME ON CAUTIONS: OFF'}</button></div></div>
           <button class="btn green wide" style="min-height:56px" data-act="startRace"${KB('enter space', 'ENTER')}>${T('GO TO RACE DAY >', 2)}</button>
           <div class="panel" style="padding:6px"><div class="small" style="margin-bottom:4px">STARTING GRID</div>${rows}</div></div></div>`));
     }
+  }
+  // v1.6 Cup qualifying: open cars race in on speed
+  function openList(q) { return q.open.map((o, i) => `<div class="list-row ${o.me ? 'me' : ''}" style="min-height:28px;cursor:default"><b style="width:22px">${i + 1}</b><span class="tag">${o.num}</span><span class="grow">${U.esc(o.name)}${o.me ? ' (YOU)' : ''}</span><span class="tag ${o.in ? 'q-in' : 'q-out'}">${o.in ? 'IN' : 'DNQ'}</span></div>`).join(''); }
+  function qualNote(q) {
+    const s = S(); const mineOut = Game.teamCars().filter(c => q.dnq.includes(c.id));
+    const mineOpen = q.open.filter(o => o.me);
+    if (!mineOut.length && !mineOpen.length) return `<div class="panel green small" style="line-height:1.5">CHARTERED: GUARANTEED START. ${q.nOpen} OPEN CARS RACED FOR ${q.spots} SPOTS.</div>`;
+    return `<div class="panel ${mineOut.length ? 'red' : 'green'} small" style="line-height:1.5">${mineOut.length ? mineOut.map(c => '#' + c.number).join(' & ') + ' DID NOT QUALIFY (OPEN CAR).' : 'OPEN CAR: RACED IN ON SPEED!'} ${q.nOpen} OPEN CARS FOR ${q.spots} SPOTS.</div>`;
+  }
+  function dnqPage(q, info) {
+    const s = S();
+    render(page('QUALIFYING - DAY 6', `<div class="cols"><div class="col narrow"><div class="panel red" style="text-align:center"><div class="small">OPEN CAR${Game.teamCars().length > 1 ? 'S' : ''} TOO SLOW</div><div class="ol" style="font-size:34px">DNQ</div><div class="small ol1" style="line-height:1.5">DID NOT QUALIFY: NO PURSE THIS WEEK.<br>SALARY AND TRAVEL ARE STILL DUE.</div></div>${info}</div>
+      <div class="col"><div class="panel small" style="line-height:1.5">A CHARTER GUARANTEES A START. LEASE ONE FOR THE REST OF THE SEASON OR BUY ONE IN BUSINESS - OR FIND MORE SPEED IN THE GARAGE.</div>
+        <div class="row" style="gap:6px"><button class="btn orange" style="flex:1;min-height:56px" data-act="go" data-arg="business">BUSINESS</button><button class="btn green" style="flex:1;min-height:56px" data-act="bizDNQ"${KB('enter space', 'ENTER')}>${T('SIT OUT THE RACE >', 2)}</button></div>
+        <div class="panel" style="padding:6px"><div class="small" style="margin-bottom:4px">OPEN CARS · ${q.spots} SPOTS</div>${openList(q)}</div></div></div>`));
   }
   // ---------- RACE (v1.4: full-screen track + TV broadcast overlays + a pro pit wall) ----------
   // The track canvas fills the whole race screen; the camera fits the track into the space between the slim overlays:
@@ -950,14 +970,16 @@ const UI = (() => {
     ui.screen = 'results'; const s = S(); const sum = ui.summary; if (!sum) return hub();
     const r = s.results[s.results.length - 1]; const me = sum.me; const me2 = sum.me2;
     const lines = sum.lines.map(([k, v]) => `<div class="row" style="justify-content:space-between"><span>${k}</span><span style="color:${v < 0 ? '#ff6b6b' : '#7dff7d'}">${v < 0 ? '-' : '+'}${U.money(Math.abs(v))}</span></div>`).join('');
-    const bestPos = Math.min(me.pos, me2 ? me2.pos : 99);
-    const head = me2 ? `<div class="small">${DATA.TRACKS[sum.track].short}</div>${[[me, s.team.number, sum.standPos], [me2, s.team.car2 ? s.team.car2.number : '', sum.standPos2]].map(([m, n, sp]) => `<div class="row" style="justify-content:center;flex-wrap:nowrap"><span class="ol" style="font-size:30px">P${m.pos}</span><span class="small ol1" style="text-align:left;line-height:1.35">#${n} ${m.status === 'RUNNING' ? (m.pos === 1 ? 'WIN!' : 'FINISHED') : 'DNF ' + m.status}<br>+${m.pts} PTS · ${U.ordinal(sp)} IN PTS</span></div>`).join('')}`
+    const bestPos = me ? Math.min(me.pos, me2 ? me2.pos : 99) : 99;
+    const head = !me ? `<div class="small">${DATA.TRACKS[sum.track].short}</div><div class="ol" style="font-size:44px">DNQ</div><div class="small ol1">DID NOT QUALIFY · NO PURSE · ${U.ordinal(sum.standPos)} IN POINTS</div>` : me2 ? `<div class="small">${DATA.TRACKS[sum.track].short}</div>${[[me, s.team.number, sum.standPos], [me2, s.team.car2 ? s.team.car2.number : '', sum.standPos2]].map(([m, n, sp]) => `<div class="row" style="justify-content:center;flex-wrap:nowrap"><span class="ol" style="font-size:30px">P${m.pos}</span><span class="small ol1" style="text-align:left;line-height:1.35">#${n} ${m.status === 'RUNNING' ? (m.pos === 1 ? 'WIN!' : 'FINISHED') : 'DNF ' + m.status}<br>+${m.pts} PTS · ${U.ordinal(sp)} IN PTS</span></div>`).join('')}`
       : `<div class="small">${DATA.TRACKS[sum.track].short}</div><div class="ol" style="font-size:44px">P${me.pos}</div><div class="small ol1">${me.status === 'RUNNING' ? (me.pos === 1 ? 'VICTORY!' : 'FINISHED') : 'DNF - ' + me.status} · STARTED ${me.grid}</div>
       <div class="small ol1" style="margin-top:4px">${sum.free ? 'FREE MODE RACE' : '+' + me.pts + ' PTS' + (Game.ser().ow || Game.isKart() ? '' : ' (' + me.stagePts + ' STAGE)') + ' · NOW ' + U.ordinal(sum.standPos) + ' IN POINTS'}</div>`;
     // v1.3: tech inspection + team event call-outs
     const notes = (sum.insp || []).map(f => `<div class="panel red small ol1" style="line-height:1.45">TECH INSPECTION: ${U.esc(f.text)}</div>`).join('')
       + (sum.teamEvent ? `<div class="panel ${sum.teamEvent.good ? 'green' : 'red'} small ol1" style="line-height:1.45"><b>TEAM EVENT: ${U.esc(sum.teamEvent.title)}</b><br>${U.esc(sum.teamEvent.text)} ${sum.teamEvent.amt ? (sum.teamEvent.amt > 0 ? '+' : '-') + U.money(Math.abs(sum.teamEvent.amt)) : ''}${sum.teamEvent.ep ? ' · ' + sum.teamEvent.ep + ' EP' : ''}${sum.teamEvent.rep ? ' · +' + sum.teamEvent.rep + ' REP' : ''}</div>` : '')
-      + (sum.double ? '<div class="panel orange small ol1">DOUBLE POINTS RACE!</div>' : '');
+      + (sum.double ? '<div class="panel orange small ol1">DOUBLE POINTS RACE!</div>' : '')
+      + (me && sum.dnq && sum.dnq.length ? `<div class="panel red small ol1">#${sum.dnq.join(' & #')} DID NOT QUALIFY (OPEN CAR).</div>` : '')
+      + (sum.bizNotes || []).map(t => `<div class="panel orange small ol1" style="line-height:1.45">${U.esc(t)}</div>`).join('');
     if (sum.free) {
       return render(page('FREE MODE RESULT', `<div class="cols"><div class="col narrow"><div class="panel ${bestPos === 1 ? 'orange' : bestPos <= 10 ? 'green' : 'red'}" style="text-align:center">${head}</div>
         <div class="panel small" style="line-height:1.6">FREE MODE · ${U.esc(Game.ser().name)}<br>JUST FOR FUN - YOUR CAREER SAVE WAS NOT TOUCHED.</div>
@@ -1179,5 +1201,8 @@ const UI = (() => {
       <div class="row" style="justify-content:flex-end;flex-wrap:nowrap"><button class="btn grey" style="min-height:48px" data-act="tutSkip"${KB('escape', 'ESC')}>SKIP</button><button class="btn green" style="min-height:48px;flex:1" data-act="tutStart"${KB('enter space', 'ENTER')}>${T('SHOW ME >', 2)}</button></div>`);
   }
   const run = (act, arg) => { const f = A[act]; if (f) f(arg); };
-  return { hub, go, onClick, onResize, toast, ui, refresh, maybeWhatsNew, whatsNew, podium, trophies, prep, startRace, results, finishRaceAndShowResults, settings, run, closeModal, modal, tutOffer };
+  // v1.6: other modules (js/business.js) add screens and actions and reuse the page chrome
+  const h = { page, T, render, modal, closeModal, confirmBox, toast, KB, SH, NEON, TAP };
+  function extend(screens, acts) { const prev = {}; for (const k of Object.keys(acts || {})) prev[k] = A[k]; Object.assign(SCREENS, screens || {}); Object.assign(A, acts || {}); return prev; }
+  return { h, extend, hub, go, onClick, onResize, toast, ui, refresh, maybeWhatsNew, whatsNew, podium, trophies, prep, startRace, results, finishRaceAndShowResults, settings, run, closeModal, modal, tutOffer };
 })();
