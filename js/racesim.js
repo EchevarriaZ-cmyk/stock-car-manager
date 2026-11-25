@@ -74,6 +74,7 @@ const RaceSim = (() => {
       else this.cars.forEach((c, i) => { c.pz = 0; c.stall = 1 - (i + 0.5) / Math.max(1, n); });
       this.cars.forEach(c => c.lastFrac = this.frac(c.d));
       this.msg('GREEN FLAG! ' + (this.geom.event ? 'THE ' + this.geom.event + ' - ' : '') + this.laps + ' LAPS AT ' + this.geom.def.short, 'green');
+      if (opts.day && typeof RD !== 'undefined') RD.initRace(this, opts.day); // v1.6 race day: radio, weather, payback, pit game
     }
     frac(d) { return d - Math.floor(d); }
     msg(text, kind) { this.log.push({ t: this.t, text, kind: kind || 'info' }); if (this.log.length > 40) this.log.shift(); this.onEvent('msg', { text, kind }); }
@@ -159,6 +160,7 @@ const RaceSim = (() => {
         names.push('#' + c.e.number);
         this.particles.push({ car: c, t: 1.5 });
       }
+      if (this.rd) RD.contact(this, car, involved); // v1.6: contact can start a feud
       const desc = r < 0.42 ? names[0] + ' SPINS' : involved.length > 4 ? 'THE BIG ONE! ' + involved.length + ' CARS' : names.join(', ') + ' WRECK';
       const pl = involved.find(c => c.isPlayer);
       for (const pc of involved.filter(c => c.isPlayer)) this.msg(this.tag(pc) + (pc.status === 'dnf' ? 'YOUR CAR IS DESTROYED - OUT OF THE RACE' : 'YOU ARE INVOLVED! DAMAGE ' + Math.round(pc.damage * 100) + '%'), 'bad');
@@ -179,6 +181,7 @@ const RaceSim = (() => {
 
     step(dt) {
       if (this.paused || this.phase === 'done') return;
+      if (this.rd && RD.tick(this, dt)) return; // v1.6: weather / radio / payback; true = red flag (the field is held)
       this.t += dt; if (this.restartT > 0) this.restartT -= dt;
       const g = this.geom, L = g.L, T = this.T, bv = this.baseV;
       const yellow = this.flag === 'yellow';
@@ -230,6 +233,7 @@ const RaceSim = (() => {
               if (U.chance(Math.max(0.004, 0.07 - c.crew * 0.05 + (50 - ps) * 0.0006))) { time += 0.35 * this.lapTime; if (c.isPlayer) this.msg(this.tag(c) + 'PIT ROAD MISTAKE! SLOW STOP', 'bad'); }
               if (c.pit.adj) time += 0.1 * this.lapTime;
               c.pit.timer = time; c.pit.total = time; c.pitCount++;
+              if (this.rd) RD.pitStart(this, c); // v1.6: radio fix / tire swap time, the pit-stop tap game
             }
           } else if (c.pit.phase === 'stop') {
             desired = 0; c.v = 0; c.pit.timer -= dt;
@@ -238,6 +242,7 @@ const RaceSim = (() => {
               if (ty === 'four') c.tire = 1; else if (ty === 'two') c.tire = Math.min(1, (c.tire + 1) / 2 + 0.05);
               c.fuel = 1; if (c.damage > 0.05) c.damage *= 0.35;
               if (c.pit.adj) c.adjB = Math.min(0.004, (c.adjB || 0) + 0.002);
+              if (this.rd) RD.pitDone(this, c); // v1.6: wets / slicks, did the fix work?
               c.lastStop = { t: this.t, time: c.pit.total, type: ty, adj: !!c.pit.adj };
               c.pit.phase = 'exit'; c.latT = g.pitLat;
               if (c.isPlayer) this.msg(this.tag(c) + 'PIT STOP DONE: ' + ({ four: '4 TIRES', two: '2 TIRES', fuel: 'FUEL' })[ty] + ' - GO GO GO!', 'player');
@@ -261,7 +266,7 @@ const RaceSim = (() => {
           desired = U.clamp(desired, 0, bv * 1.05);
           if (gp < 26) desired = Math.min(desired, paceV * 0.3);
         } else {
-          let f = 1 + (c.perf - 70) * 0.003 + c.form + md.spd + c.noise - (1 - c.tire) * T.tireFall - c.damage * 0.08 + (c.adjB || 0);
+          let f = 1 + (c.perf - 70) * 0.003 + c.form + md.spd + c.noise - (1 - c.tire) * T.tireFall - c.damage * 0.08 + (c.adjB || 0) + (c.rdMod || 0);
           const laneIdx = g.lanes.indexOf(c.latT); if (laneIdx > 0 && T.outsidePen) f -= T.outsidePen * laneIdx;
           const dr = ahead(c, T.draftRange, 18);
           if (dr) f += T.draft * Math.pow(1 - dr.gp / T.draftRange, 0.7) * (0.8 + c.e.craft / 250);
@@ -325,7 +330,7 @@ const RaceSim = (() => {
         // incidents (green only)
         if (c.status === 'run' && this.flag === 'green' && this.phase === 'racing' && !c.pit && dd > 0 && this.t > 3) {
           const md = MODES[c.mode] || MODES.normal;
-          const risk = T.incident * (1.7 - c.e.cons / 100) * (0.75 + (c.e.aggr === undefined ? 50 : c.e.aggr) / 200) * md.risk * (1 + (1 - c.tire) * 1.4) * (1 + c.damage);
+          const risk = T.incident * (1.7 - c.e.cons / 100) * (0.75 + (c.e.aggr === undefined ? 50 : c.e.aggr) / 200) * md.risk * (1 + (1 - c.tire) * 1.4) * (1 + c.damage) * (c.rdRisk || 1);
           if (U.chance(risk * dd)) this.crash(c);
           else if (U.chance(0.00025 * (1.5 - c.e.rel / 100) * dd)) {
             c.status = 'dnf'; c.reason = 'ENGINE'; c.outT = 3;
@@ -432,7 +437,7 @@ const RaceSim = (() => {
     results() {
       const ord = this.order();
       const all = ord.map((c, i) => ({ id: c.id, pos: i + 1, laps: c.laps, status: c.status === 'dnf' ? c.reason : 'RUNNING', lapsLed: c.lapsLed, stagePts: c.stagePts, number: c.e.number, isPlayer: c.isPlayer, pitStops: c.pitCount, grid: c.grid }));
-      return { order: all, stages: this.stageResults, cautions: this.cautions, track: this.geom.id };
+      return { order: all, stages: this.stageResults, cautions: this.cautions, track: this.geom.id, rd: this.rd ? RD.summary(this) : undefined };
     }
   }
   return { Race, qualify, cautionChoice, MODES, CAR_LEN, PIT_TIME };

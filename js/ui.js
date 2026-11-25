@@ -91,6 +91,7 @@ const UI = (() => {
     else if (Game.hasCar()) B.push(['[SCOUTING]', 'NO PROSPECTS ON THE LIST. SEND A SCOUT TO FIND THE NEXT STAR (DRIVERS > SCOUTING).']);
     for (const r of s.team.rnd) B.push(['[R&D]', DATA.PARTS[r.part].name + ' UPGRADE: ' + r.days + ' DAYS LEFT.']);
     for (const b of s.team.builds) B.push(['[FACILITIES]', DATA.FACILITIES[b.fac].name + ' CONSTRUCTION: ' + b.days + ' DAYS LEFT.']);
+    if (typeof RD !== 'undefined') { const wl = RD.tickerLine(); if (wl) A.push(wl); if (RD.alerts()) B.push(['[DRAMA]', RD.alerts() + ' DRIVER ISSUE' + (RD.alerts() > 1 ? 'S' : '') + ' WAITING FOR THE OWNER - SEE BUSINESS > DRAMA.']); }
     for (const n of s.news.slice(0, 4)) B.push(['[NEWS]', n.text]);
     return [A, B];
   }
@@ -716,7 +717,7 @@ const UI = (() => {
     const P = ui.prep; s.day = P.stage === 'practice' ? 5 : 6;
     const d = Game.myDriver(); const d2 = s.team.car2 ? Game.carDriver(2) : null;
     const info = `<div class="panel" style="text-align:center"><img class="pix" src="${previewURL(tid, 200, 120)}" style="width:100%;max-width:240px;border:2px solid #1b1b1b" alt="">
-      <div class="ol1" style="margin-top:4px">${ev ? '<span class="neon">THE ' + ev + '</span><br>' : ''}${t.name}</div><div class="tiny">${t.note}${t.bank ? ' · ' + DATA.bankWord(t.bank) : ''}</div><div class="tiny">${s.free ? 'FREE MODE · ' + Game.ser().short + ' · ' : ''}${ty.name} · ${ty.laps} LAPS · ${ty.stages.length ? 'STAGES END LAP ' + ty.stages.join(' & ') : 'NO STAGES'}${ty.fuelLaps < ty.laps ? ' · FUEL ~' + ty.fuelLaps + ' LAPS' : ''}</div></div>
+      <div class="ol1" style="margin-top:4px">${ev ? '<span class="neon">THE ' + ev + '</span><br>' : ''}${t.name}</div><div class="tiny">${t.note}${t.bank ? ' · ' + DATA.bankWord(t.bank) : ''}</div><div class="tiny">${s.free ? 'FREE MODE · ' + Game.ser().short + ' · ' : ''}${ty.name} · ${ty.laps} LAPS · ${ty.stages.length ? 'STAGES END LAP ' + ty.stages.join(' & ') : 'NO STAGES'}${ty.fuelLaps < ty.laps ? ' · FUEL ~' + ty.fuelLaps + ' LAPS' : ''}</div></div>${typeof RDUI !== 'undefined' && RDUI ? RDUI.forecastHTML(tid) : ''}
       <div class="panel small" style="line-height:1.6">YOUR CAR HERE: ${Math.round(Game.carRating(t.type))} (FIELD AVG ${Math.round(Game.fieldAvgCar())})<br>#${s.team.number} ${U.esc(Game.driverShort(d))} · ${Math.round(Game.driverTypeRating(d, t.type))} ${typeShort(t.type)} RATING${d2 ? `<br>#${s.team.car2.number} ${U.esc(Game.driverShort(d2))} · ${Math.round(Game.driverTypeRating(d2, t.type))} ${typeShort(t.type)} RATING` : ''}</div>`;
     if (P.stage === 'practice') {
       const fb = U.pick(['"THE CAR IS A LITTLE LOOSE OFF TURN 4."', '"WE NEED MORE TURN IN, IT\'S TIGHT IN THE CENTER."', '"FEELS GOOD ON THE LONG RUN!"', '"REAR TIRES ARE GOING AWAY FAST."', '"THE BALANCE IS CLOSE. LET\'S DIAL IT IN."']);
@@ -737,7 +738,7 @@ const UI = (() => {
       render(page('QUALIFYING - DAY 6', `<div class="cols"><div class="col narrow"><div class="panel red" style="text-align:center"><div class="small">YOU QUALIFIED</div><div class="ol" style="font-size:${myPos2 ? 30 : 40}px">P${myPos}${myPos2 ? ' & P' + myPos2 : ''}</div><div class="small">OF ${grid.length}${myPos2 ? ' · #' + s.team.number + ' & #' + s.team.car2.number : ''}</div></div>${q ? qualNote(q) : ''}${info}</div>
         <div class="col"><div class="panel"><h3>STRATEGY</h3><div class="small">CREW CHIEF STYLE (USED WHEN YOU SKIP OR AUTO-CALL)</div><div class="row" style="margin:6px 0">${sb('aggressive', 'TRACK POS')}${sb('balanced', 'BALANCED')}${sb('conservative', 'FRESH TIRES')}</div>
           <div class="small">START PACE${myPos2 ? ' (BOTH CARS)' : ''}</div><div class="row" style="margin:6px 0">${mb('push', 'PUSH')}${mb('normal', 'NORMAL')}${mb('save', 'SAVE')}</div>
-          <div class="row"><button class="btn ${P.ask ? 'green' : 'dark'}" style="flex:1" data-act="prepAsk">${P.ask ? 'ASK ME ON CAUTIONS: ON' : 'ASK ME ON CAUTIONS: OFF'}</button></div></div>
+          <div class="row"><button class="btn ${P.ask ? 'green' : 'dark'}" style="flex:1" data-act="prepAsk">${P.ask ? 'ASK ME ON CAUTIONS: ON' : 'ASK ME ON CAUTIONS: OFF'}</button></div>${typeof RDUI !== 'undefined' && RDUI ? RDUI.prepHTML(P) : ''}</div>
           <button class="btn green wide" style="min-height:56px" data-act="startRace"${KB('enter space', 'ENTER')}>${T('GO TO RACE DAY >', 2)}</button>
           <div class="panel" style="padding:6px"><div class="small" style="margin-bottom:4px">STARTING GRID</div>${rows}</div></div></div>`));
     }
@@ -781,7 +782,7 @@ const UI = (() => {
       hold: 1.7, fx: {}, adj: false, lastFast: null, battleT: -99, white: false, menu: null, collapsed: !!ui.boardCollapsed };
     ui.race = R; ui.screen = 'race';
     const ids = P.grid.filter(e => e.isPlayer).sort((a, b) => (a.slot || 1) - (b.slot || 1)).map(e => e.id);
-    R.race = new RaceSim.Race({ geom, grid: P.grid, playerIds: ids, style: P.style, mode: P.mode, autoPlayer: !P.ask, onEvent: (t, d) => raceEvent(t, d) });
+    R.race = new RaceSim.Race({ geom, grid: P.grid, playerIds: ids, style: P.style, mode: P.mode, autoPlayer: !P.ask, onEvent: (t, d) => raceEvent(t, d), day: typeof RD !== 'undefined' ? RD.dayFor(geom, P) : null });
     R.F = tvFactor(R.race); R.FS = 11.5 / (RaceSim.PIT_TIME.four * R.race.lapTime); // pit stops: 4 tires ~11.5 TV seconds with an average crew
     render(`<div class="screen race rx2"><div class="race-main full"><canvas id="rc"></canvas>
       <div class="tv-top" id="tvtop"></div><div class="cban" id="cban"></div>
@@ -793,6 +794,7 @@ const UI = (() => {
     // start graphic: grid info + the light sequence, then the green flag
     const me = R.race.player('P'); const startP = me ? R.race.positionOf(me) : 0;
     fxShow('start', `<div class="sg-card"><div class="sg-top">${geom.event ? 'THE ' + U.esc(geom.event) : U.esc(geom.def.city.toUpperCase())}</div>${T(geom.def.short, 3, SH)}<div class="sg-sub">${R.race.laps} LAPS · ${P.grid.length} CARS · YOU START P${startP}</div><div class="sg-lights"><i></i><i></i><i></i><i></i><i></i></div></div>`, 1700);
+    if (typeof RDUI !== 'undefined' && RDUI) RDUI.attach(R); // v1.6 race day overlays (radio bubble, pit fix panel, pit game)
     R.last = performance.now();
     const loop = (ts) => {
       if (R.stopped) return;
@@ -849,13 +851,14 @@ const UI = (() => {
     const flag = flagState(race); const ll = race.leaderLaps(); const lap = Math.min(race.laps, Math.max(1, ll + (race.phase === 'racing' ? 1 : 0)));
     const stg = !race.stages.length ? '' : race.stage <= race.stages.length ? 'STAGE ' + race.stage : 'FINAL STAGE';
     const team = race.teamCars(); const camLbl = R.view && R.view.mode === 'follow' ? 'FOLLOW' : 'TRACK';
-    const key = [flag, lap, stg, R.sel, R.speed, camLbl, race.phase].join('|'); if (el._k === key) return; el._k = key;
+    const wx = typeof RDUI !== 'undefined' && RDUI ? RDUI.topIcon(race) : '';
+    const key = [flag, lap, stg, R.sel, R.speed, camLbl, race.phase, wx].join('|'); if (el._k === key) return; el._k = key;
     if (R.white === false && flag === 'white') { R.white = true; splash('WHITE FLAG', 'white', 'FINAL LAP!'); }
     el.className = 'tv-top f-' + flag;
     const left = team.length > 1 ? team.map(c => `<button class="tvt-btn car ${R.sel === c.id ? 'sel' : ''}" data-act="raceSel" data-arg="${c.id}"${R.sel === c.id ? '' : KB('t arrowleft arrowright', 'T')}><span class="sw" style="background:${c.e.livery.body}"></span>#${c.e.number}</button>`).join('')
       : `<span class="tvt-team">${T(s.team.name.length > 16 ? s.team.name.slice(0, 16) : s.team.name, 2, SH)}</span>`;
     const ft = { green: '', yellow: 'CAUTION ', white: 'WHITE FLAG ', checker: 'FINISH ' }[flag];
-    el.innerHTML = `<div class="tvt-l">${left}</div><div class="tvt-mid"><span class="flagico f-${flag}"><i></i></span><span class="tvt-lap">${ft}LAP ${lap}/${race.laps}</span>${stg ? `<span class="tvt-stg">${stg}${race.stage <= race.stages.length ? ' · ENDS L' + race.stages[race.stage - 1] : ''}</span>` : ''}</div>
+    el.innerHTML = `<div class="tvt-l">${left}</div><div class="tvt-mid"><span class="flagico f-${flag}"><i></i></span>${wx}<span class="tvt-lap">${ft}LAP ${lap}/${race.laps}</span>${stg ? `<span class="tvt-stg">${stg}${race.stage <= race.stages.length ? ' · ENDS L' + race.stages[race.stage - 1] : ''}</span>` : ''}</div>
       <div class="tvt-r">${race.phase === 'done' ? '' : `<button class="tvt-btn" data-act="raceCam"${KB('c')}>${camLbl === 'FOLLOW' ? 'FOLLOW' : 'TRACK'}</button><button class="tvt-btn ${R.speed === 4 ? 'sel' : ''}" data-act="raceSpeed" data-arg="${R.speed === 4 ? 1 : 4}"${KB('f', 'F')}>${R.speed}X</button><button class="tvt-btn skip" data-act="raceSkip">SKIP &#9654;&#9654;</button>`}</div>`;
   }
   const PIT_LABEL = { four: '4 TIRES', two: '2 TIRES', fuel: 'FUEL ONLY', stay: 'STAY OUT' };

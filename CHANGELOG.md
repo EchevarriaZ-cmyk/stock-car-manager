@@ -1,7 +1,7 @@
 # Changelog
 
 ## v1.6 — Owner's Box (Nov 24, 2026)
-*Pass A: the business side of the team. (Race-day features for 1.6 come in a later pass.)*
+*The business side of the team (charters, rivals, manufacturers) and race day (driver radio, pit crew, weather, driver drama).*
 - **You are still the owner / manager, never the driver.**
 - **New BUSINESS button on the hub** (bottom bar, next to Free Mode; B on a keyboard) with three tabs: Charters, Rivals and Manufacturer. A red dot counts rival offers and manufacturer offers waiting for an answer. The hub still fits on one screen at 844x390 and 740x360 (the 9 tiles are unchanged).
 - **Cup charters:**
@@ -20,7 +20,24 @@
   - Goals are checked at season end: all met = a bigger renewal offer; half met = a smaller one; missed = the deal ends and that make sits out a season.
   - One manufacturer at a time; switching mid-deal costs money. Your make shows as a badge on the hub (on the Business button).
 - **Charlotte** gets a longer, flatter frontstretch (closer to the real quad-oval) so its 40 Cup pit boxes stay roomy.
-- **Saves:** v1.0 to v1.5 saves load. They get a crew chief and the business layer with no deals and no offers; a Cup team from an older save keeps racing with a charter (one per car) and keeps its current field until the next season.
+- **Race day - driver radio calls:** during a race your driver now and then radios a handling problem - "car's loose in", "tight off", "rears are going" or "vibration" - in a small radio bubble on the track view (it never stops the race).
+  - At your next stop a **RADIO FIX** panel opens next to the pit menu: WEDGE, TRACK BAR or AIR PRESSURE for stock cars; FRONT WING, REAR WING or PRESSURES for open-wheel cars; or NO CHANGE (saves time). The crew chief's pick is marked. Keyboard: 7 / 8 / 9 / 0.
+  - The right fix brings the pace back (and a touch more); the wrong fix or no fix and the car keeps getting slower until it is sorted. A vibration is also cured by a 4-tire stop.
+  - Drivers with good feedback (tire management + consistency, plus personality) make clear calls; a vague call ("the back end feels funny") shows as ??? and the crew chief can guess wrong. A better crew chief guesses better. Qualifying trim brings more handling calls, race trim fewer.
+- **Race day - pit crew + training** (Business > PIT CREW):
+  - Hire a pit crew from Local Volunteers (free) to an Elite Crew - 5 levels, paid every race (a PIT CREW line on the results). Train the crew once between races; sharpness fades a little every race.
+  - One **PIT CREW SPEED** number shows the whole picture so nothing is counted twice: base + pit center + crew chief (from pass A) + pit crew level + training, with the 4-tire stop time it means. The crew chief makes the calls and the radio fixes; the pit crew does the stop.
+  - **Pit-stop tap game:** when your car stops in its box the race pauses for a quick tap game - one tap per wheel when the marker is on the green zone (a better crew gets a wider zone). Perfect / good taps shave time, misses add time and can cause a **loose-wheel penalty** (held on pit road). Big 48px+ TAP button, mouse click or SPACE. AUTO skips it and uses your crew level; a wheel you do not tap within 3 seconds is done on AUTO. Turn the game off on the qualifying screen (PIT STOP TAP GAME: ON/OFF); it is also off when caution calls are off and when you skip.
+- **Race day - weather:**
+  - Every race weekend has a **forecast** - sunny, cloudy or rain likely, with a rain chance - on the practice and qualifying screens and in the hub ticker. A weather icon sits in the race top bar (RAIN, WET, RED FLAG), and light rain is drawn on the track picture under the cars, so it never hides them.
+  - **Ovals:** rain brings a caution, then a **RED FLAG** (the field is held). Before halfway the jet dryers do their job and the race restarts under caution; past halfway the race can be **called for rain** and the result is official (a RAIN-SHORTENED note on the results and in the news).
+  - **Road and street courses** race in the rain: wets or slicks. Slicks on a wet track are slow and slide off; wets on a drying track are slow and wear out. Timing the switch matters. The crew chief radios when it is time ("track is drying - time for slicks?") and the pit fix panel gets WETS / SLICKS buttons (keys 5 / 6). AI teams make their own tire calls, some earlier, some later.
+- **Race day - driver drama** (Business > DRAMA):
+  - Drivers have personalities: **hothead, calm, showman, team player** (from their aggression). Hotheads hold grudges, showmen sell drama, team players give great feedback and calm down easily.
+  - On-track contact with one of your cars can start a **feud**; a driver with a hot grudge can **wreck his rival on purpose** in a later race. An intentional wreck brings a **NASCAR fine and lost points** (race control in open-wheel); a rival who wrecks your driver gets fined and your driver wants payback.
+  - Drama brings **fan hype** and a DRAMA MERCH BOOST every race (it fades).
+  - It shows in the news ticker, on the results, and as an owner talk in Business > DRAMA (the BUSINESS dot counts them): **BACK HIM** (morale up, feud hotter), **FINE HIM** (morale down, money back, cools it) or **CALM DOWN** (cools the grudge - works best on calm drivers and team players). Morale feeds the pass-A loyalty when a rival tries to poach him. Unanswered talks expire after 2 races (a small morale hit).
+- **Saves:** v1.0 to v1.5 saves (and earlier v1.6 saves) load. They get a crew chief and the business layer with no deals and no offers; a Cup team from an older save keeps racing with a charter (one per car) and keeps its current field until the next season. Every old save starts race day with a volunteer pit crew, no training, no feuds or talks, and a personality for each driver.
 
 ## v1.5 — Street Fight (Nov 24, 2026)
 - **The five street circuits now look like the real ones.** St. Pete, Long Beach, Detroit, Toronto and Chicago are traced from the real track maps (simplified, top-down), with the real turn count, turn order and direction. Track lengths are unchanged.

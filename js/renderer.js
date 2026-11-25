@@ -230,6 +230,8 @@ const Renderer = (() => {
         s = this.sF; ox = this.oxF; oy = this.oyF; big = false;
         x.drawImage(this.bgFull, ox, oy);
       }
+      // v1.6: rain is drawn on the track picture, under the cars, so it never hides them
+      if (race.rd && typeof RD !== 'undefined' && typeof RDUI !== 'undefined' && RDUI) RDUI.drawRain(x, this, race);
       // v1.4: on pit road a car shrinks to pit-road scale (k = 0..1 down the entry lane) so it fits its box
       const drawCar = (lv, number, d, lat, ang, pitK, boxLen) => {
         const p = g.pos(d, lat); let spr = big ? Art.carBig(lv, number, Math.cos(p.a) < -0.05) : Art.carSmall(lv);

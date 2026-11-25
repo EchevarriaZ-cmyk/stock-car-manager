@@ -433,6 +433,7 @@ const BizUI = (() => {
   function tabs() {
     const n = Biz.poachOpen().length; const m = S().biz.mfr.offers.length;
     const list = [['charters', 'CHARTERS'], ['rivals', 'RIVALS' + (n ? ' (' + n + ')' : '')], ['maker', 'MANUFACTURER' + (m ? ' (' + m + ')' : '')]];
+    if (typeof RDUI !== 'undefined' && RDUI) list.push(...RDUI.tabs()); // v1.6 race day: PIT CREW + DRAMA
     return `<div class="row biz-tabs">${list.map(([t, l]) => `<button class="btn ${ui.tab === t ? 'orange sel' : 'dark'}" data-act="bizTab" data-arg="${t}">${l}</button>`).join('')}</div>`;
   }
   function badge(make, sc) { const M = Biz.MAKES[make]; return `<span class="mk-badge" style="background:${M.bg}">${PF.img(M.short, { scale: sc || 2, color: M.fg })}</span>`; }
@@ -487,7 +488,8 @@ const BizUI = (() => {
   function screen() {
     const s = S(); if (!s || s.free) return UI.go('hub');
     Biz.ensure(s); UI.ui.screen = 'business';
-    const body = ui.tab === 'rivals' ? rivals() : ui.tab === 'maker' ? maker() : charters();
+    const rdb = typeof RDUI !== 'undefined' && RDUI ? RDUI.body(ui.tab) : null;
+    const body = rdb || (ui.tab === 'rivals' ? rivals() : ui.tab === 'maker' ? maker() : charters());
     H.render(H.page('BUSINESS', `${tabs()}${body}`));
   }
   function ref() { screen(); }

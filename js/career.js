@@ -241,6 +241,7 @@ const Game = (() => {
     resetStandings();
     refreshOffers();
     if (typeof Biz !== 'undefined') Biz.ensure(S);
+    if (typeof RD !== 'undefined') RD.ensure(S);
     save();
     return S;
   }
@@ -519,7 +520,7 @@ const Game = (() => {
       const d = carDriver(tc.slot); if (!d) continue;
       const e = Object.assign({ id: tc.id, slot: tc.slot, isPlayer: true, number: tc.number, team: S.team.name, driverShort: driverShort(d), driver: driverName(d), livery: carLivery(tc.slot),
         car: carRating(type) + setup.car, drv: driverTypeRating(d, type) + simB,
-        rel: Math.min(110, 55 + S.team.fac.engineDept * 7 + (S.team.parts.engine - ser().floor) * 0.3), crew: Math.min(1.12, 0.35 + S.team.fac.pitCenter * 0.12 + (typeof Biz !== 'undefined' ? Biz.chiefCrew() : 0)), qualBonus: setup.qual }, drvFields(d, simB));
+        rel: Math.min(110, 55 + S.team.fac.engineDept * 7 + (S.team.parts.engine - ser().floor) * 0.3), crew: Math.min(1.12, 0.35 + S.team.fac.pitCenter * 0.12 + (typeof Biz !== 'undefined' ? Biz.chiefCrew() : 0)) + (typeof RD !== 'undefined' ? RD.crewBonus() : 0), qualBonus: setup.qual }, drvFields(d, simB));
       e.cons = U.clamp(e.cons + setup.cons, 1, 99);
       out.push(e);
     }
@@ -702,6 +703,7 @@ const Game = (() => {
       if (r.status === 'ENGINE') sum.lines.push(['ENGINE REBUILD' + tag(tc), -(s.entry ? Math.round(6000 * s.mult) : Math.round(30000 * s.mult))]);
     }
     if (typeof Biz !== 'undefined' && !S.free) Biz.raceLines(sum, cars);
+    if (typeof RD !== 'undefined' && !S.free) RD.raceLines(sum, cars, res); // v1.6 race day: pit crew wages, fines, drama, rain notes
     let net = 0; for (const l of sum.lines) net += l[1]; sum.net = net; S.money += net;
     // expired sponsors
     for (const sp of allSponsors().filter(x => x.races <= 0)) {
@@ -1044,6 +1046,7 @@ const Game = (() => {
     if (!o.trophies) o.trophies = backfillTrophies(o);
     if (from < 2) { o.migratedFrom = from; o.version = SAVE_VERSION; }
     if (typeof Biz !== 'undefined') Biz.migrate(o); // v1.6: charters, rivals, crew chief, manufacturer
+    if (typeof RD !== 'undefined') RD.migrate(o); // v1.6 race day: pit crew, feuds, personalities
     return o;
   }
   // v1.2: made-up tracks became real ones. Map old ids everywhere they appear (schedule, results, trophies, news).
