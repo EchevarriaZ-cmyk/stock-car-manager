@@ -1,7 +1,7 @@
 /* Track geometry: builds a closed centerline path for any track shape */
 'use strict';
 class TrackGeom {
-  constructor(trackId, seriesIdx) {
+  constructor(trackId, seriesIdx, opts) {
     const def = DATA.TRACKS[trackId];
     this.id = trackId; this.def = def; this.type = def.type; this.T = DATA.raceT(trackId, seriesIdx); this.seriesIdx = seriesIdx;
     const sh = def.shape;
@@ -69,6 +69,8 @@ class TrackGeom {
       }
       const z = { n: nb, start: 1 - (before + entry) / L, boxA: entry / L, boxB: (entry + zone) / L }; z.range = (zone + entry + exit) / L; z.boxLen = zone / nb;
       this.zones.push(z);
+      // v1.7.1: kart tracks get their own pit lane (falls back to the v1.6.2 lane if no spot is found)
+      if (def.kart && !(opts && opts.lite)) this._kartPit(nCars); // lite = centreline only (track icons)
     }
     // zone 0 also under the v1.3 names (renderer, tests)
     const z0 = this.zones[0];
@@ -76,9 +78,11 @@ class TrackGeom {
     // bbox with margins
     let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
     for (let i = 0; i < this.M; i++) { minX = Math.min(minX, this.X[i]); maxX = Math.max(maxX, this.X[i]); minY = Math.min(minY, this.Y[i]); maxY = Math.max(maxY, this.Y[i]); }
+    const PLn = this.pitLane; if (PLn) for (let i = 0; i < PLn.n; i++) for (const o of [0, 70]) { const x = PLn.X[i] + PLn.NX[i] * o, y = PLn.Y[i] + PLn.NY[i] * o; minX = Math.min(minX, x + this.hw + 62); maxX = Math.max(maxX, x - this.hw - 62); minY = Math.min(minY, y + this.hw + 62); maxY = Math.max(maxY, y - this.hw - 62); }
     const maxDep = Math.max(0, ...DATA.standsFor(trackId).map(x => x[2])); const m = this.hw + Math.max(122, 16 + maxDep + 34); // room for the stands + press box
     this.ox = -minX + m; this.oy = -minY + m;
     for (let i = 0; i < this.M; i++) { this.X[i] += this.ox; this.Y[i] += this.oy; }
+    if (PLn) for (let i = 0; i < PLn.n; i++) { PLn.X[i] += this.ox; PLn.Y[i] += this.oy; }
     this.W = Math.ceil(maxX - minX + m * 2); this.H = Math.ceil(maxY - minY + m * 2);
     // v1.5: street circuits get a landscape-shaped city around them so the scenery fills a phone screen
     if (def.street) { const W2 = Math.max(this.W, Math.ceil(this.H * 1.8)); const dx = Math.round((W2 - this.W) / 2); if (dx > 0) { for (let i = 0; i < this.M; i++) this.X[i] += dx; this.ox += dx; this.W = W2; } }
@@ -182,8 +186,140 @@ class TrackGeom {
     const a = a1 + da * t;
     // right normal in y-down coords = (-sin a, cos a) rotated: heading (cos,sin); right = (-sin, cos)
     const rx = -Math.sin(a), ry = Math.cos(a);
-    return { x: x + rx * (lat || 0), y: y + ry * (lat || 0), a };
+    const P = { x: x + rx * (lat || 0), y: y + ry * (lat || 0), a };
+    return this.pitLane ? this._pitWarp(frac, lat || 0, P) : P;
   }
+  // v1.7.1 kart tracks: pit road lives on its own lane. Anything drawn or driven on the pit side of the track inside the pit
+  // zone (pit road, its walls, box lines, cars on pit road) is carried over to that lane: u = distance out from the track
+  // edge, the lane's track-side edge sits at u = 18 (as on every other track), so the rest of the game needs no changes.
+  _pitWarp(frac, lat, P) {
+    const PL = this.pitLane, z = this.zones[0]; const u = lat * this.side - this.hw; if (u <= 5) return P;
+    const rel = ((frac - z.start) % 1 + 1) % 1; if (rel > z.range) return P;
+    const k0 = U.clamp(Math.min(rel, z.range - rel) * this.L / 60, 0, 1); // ease onto / off the lane over the first and last 60 units
+    const w0 = U.clamp((u - 5) / 13, 0, 1) * k0 * k0 * (3 - 2 * k0), w = w0 * w0 * (3 - 2 * w0);
+    const sp = rel / z.range * (PL.n - 1), i = Math.min(PL.n - 2, Math.floor(sp)), t = sp - i;
+    const sx = PL.X[i] + (PL.X[i + 1] - PL.X[i]) * t, sy = PL.Y[i] + (PL.Y[i + 1] - PL.Y[i]) * t;
+    const nx = PL.NX[i] + (PL.NX[i + 1] - PL.NX[i]) * t, ny = PL.NY[i] + (PL.NY[i + 1] - PL.NY[i]) * t;
+    let da = PL.A[i + 1] - PL.A[i]; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI; const la = PL.A[i] + da * t;
+    const qx = sx + nx * (u - 18), qy = sy + ny * (u - 18);
+    let dA = la - P.a; while (dA > Math.PI) dA -= 2 * Math.PI; while (dA < -Math.PI) dA += 2 * Math.PI;
+    return { x: P.x + (qx - P.x) * w, y: P.y + (qy - P.y) * w, a: P.a + dA * w };
+  }
+  // curbs / tyre walls are left out where pit road meets the track (with a separate lane that is just the two branch points)
+  curbSkip(frac) {
+    if (!this.pitLane) return this.inPitZone(frac);
+    const z = this.zones[0], rel = this.pitProg(frac, 0) * this.L, R = z.range * this.L; return rel <= R && (rel < 70 || R - rel < 70);
+  }
+  // v1.7.1: find a dedicated pit lane for a kart track: a straight row of full-size boxes (one row, never folded) parallel to
+  // one of the longer straights, out in the free space on either side, joined to the track by smooth entry / exit roads.
+  // Nothing of it may come near the track surface, the curbs or the grandstand.
+  _kartPit(nCars) {
+    const ck = this.id + ':' + nCars, C = TrackGeom._kpCache || (TrackGeom._kpCache = {});
+    if (C[ck] !== undefined) { const c = C[ck]; if (c) this._applyKartPit(c); return; }
+    const M = this.M, ds = this.L / M, hw = this.hw, X = this.X, Y = this.Y, A = this.A;
+    const box = nCars <= 20 ? 16 : 12, lead = 26, row = nCars * box, straight = row + 2 * lead;
+    const dA = (a, b) => { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
+    // obstacles: the track centerline (keep hw + 16 clear = surface + curbs + grass) and the grandstands
+    const obst = []; for (let i = 0; i < M; i++) obst.push([X[i], Y[i], hw + 16]);
+    for (const [f0, f1, dep] of DATA.standsFor(this.id)) { const span = ((f1 - f0) % 1 + 1) % 1 || 1; for (const sg of [1, -1]) for (let f = f0; f <= f0 + span; f += 6 / this.L) for (let o = hw + 16; o <= hw + 16 + dep; o += 8) { const p = this._rawPos(f, sg * o); obst.push([p.x, p.y, 10]); } } // the stands sit opposite pit road, so either side may get them
+    const CS = 24, grid = new Map(), key = (gx, gy) => gx * 100003 + gy;
+    obst.forEach((o, k) => { const gx = Math.floor(o[0] / CS), gy = Math.floor(o[1] / CS), K = key(gx, gy); if (!grid.has(K)) grid.set(K, []); grid.get(K).push(k); });
+    const clear = (x, y, skip) => { const gx = Math.floor(x / CS), gy = Math.floor(y / CS);
+      for (let ix = gx - 2; ix <= gx + 2; ix++) for (let iy = gy - 2; iy <= gy + 2; iy++) { const L = grid.get(key(ix, iy)); if (!L) continue;
+        for (const k of L) { if (skip && k < M && skip(k)) continue; const o = obst[k]; const dx = x - o[0], dy = y - o[1]; if (dx * dx + dy * dy < o[2] * o[2]) return false; } }
+      return true; };
+    // straights: runs of samples with little heading change
+    const runs = []; let cur = null; const w = Math.max(1, Math.round(9 / ds));
+    for (let i = 0; i < M; i++) { const st = Math.abs(dA(A[(i + w) % M], A[(i - w + M) % M])) < 0.06; if (st) { if (!cur) cur = { a: i, len: 0 }; cur.len++; } else if (cur) { runs.push(cur); cur = null; } }
+    if (cur) { if (runs.length && runs[0].a === 0) { runs[0].a = cur.a; runs[0].len += cur.len; } else runs.push(cur); }
+    runs.sort((p, q) => q.len - p.len);
+    const bez = (P0, a0, P1, a1, n) => { const d = Math.hypot(P1[0] - P0[0], P1[1] - P0[1]), h = d * 0.42; const c0 = [P0[0] + Math.cos(a0) * h, P0[1] + Math.sin(a0) * h], c1 = [P1[0] - Math.cos(a1) * h, P1[1] - Math.sin(a1) * h]; const out = [];
+      for (let k = 0; k <= n; k++) { const t = k / n, mt = 1 - t; out.push([mt * mt * mt * P0[0] + 3 * mt * mt * t * c0[0] + 3 * mt * t * t * c1[0] + t * t * t * P1[0], mt * mt * mt * P0[1] + 3 * mt * mt * t * c0[1] + 3 * mt * t * t * c1[1] + t * t * t * P1[1]]); } return out; };
+    const plen = (pts) => { let l = 0; for (let k = 1; k < pts.length; k++) l += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]); return l; };
+    // a connector is fine when its pit road (offsets -3..48 from the lane edge) stays clear of the track away from its branch point,
+    // and it never turns tighter than a ~28-unit radius
+    const connOk = (pts, side, fromTrack, bi) => {
+      const n = pts.length - 1, arcSkip = Math.round(110 / ds);
+      for (let k = 1; k < n; k++) { const a = Math.atan2(pts[k + 1][1] - pts[k - 1][1], pts[k + 1][0] - pts[k - 1][0]), b = k > 1 ? Math.atan2(pts[k][1] - pts[k - 2][1], pts[k][0] - pts[k - 2][0]) : a;
+        const segL = Math.hypot(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1]) || 1; if (Math.abs(dA(a, b)) / segL > 1 / 28) return false;
+        const t = fromTrack ? k / n : 1 - k / n; // 0 at the branch point
+        const nx = -Math.sin(a) * side, ny = Math.cos(a) * side;
+        for (const o of t < 0.4 ? [24, 48] : [-3, 22, 48]) { const x = pts[k][0] + nx * o, y = pts[k][1] + ny * o;
+          if (!clear(x, y, t < 0.55 ? (j => { let d = Math.abs(j - bi); d = Math.min(d, M - d); return d < arcSkip; }) : null)) return false; } }
+      return true;
+    };
+    // branch points sit on a fairly straight bit of track (the pit road peels off a straight, never out of a hairpin)
+    const w2 = Math.max(2, Math.round(45 / ds)), calm = i => Math.abs(dA(A[(i + w2) % M], A[(i - w2 + M) % M])) < 0.9;
+    let best = null; const cands = [];
+    for (const side of [this.side, -this.side]) for (const r of runs.slice(0, 4)) {
+      const im = (r.a + Math.floor(r.len / 2)) % M, a = A[im], dx = Math.cos(a), dy = Math.sin(a), nx = -Math.sin(a) * side, ny = Math.cos(a) * side;
+      let found = false;
+      for (let D = hw + 22; D <= hw + 560 && !found; D += 12) {
+        if (best && D > best.D + 160) break;
+        for (const sh of [0, -60, 60, -130, 130, -220, 220]) {
+          const cx = X[im] + nx * D + dx * sh, cy = Y[im] + ny * D + dy * sh;
+          const R0 = [cx - dx * straight / 2, cy - dy * straight / 2], R1 = [cx + dx * straight / 2, cy + dy * straight / 2];
+          let ok = true;
+          for (let s = 0; s <= straight && ok; s += 6) for (const o of [-3, 0, 22, 48]) { if (!clear(R0[0] + dx * s + nx * o, R0[1] + dy * s + ny * o)) { ok = false; break; } }
+          if (!ok) continue;
+          // entry: branch off the track somewhere before the row; exit: rejoin somewhere after it
+          let bestA = null, bestB = null;
+          for (let k = Math.round(40 / ds); k < M * 0.45; k += Math.max(1, Math.round(15 / ds))) {
+            const i = (im - Math.round((straight / 2 + sh) / ds) - k + M * 4) % M;
+            if (!calm(i)) continue; const P0 = this._rawPos(i / M, side * (hw + 18)); if (bestA && Math.hypot(R0[0] - P0.x, R0[1] - P0.y) > bestA.l) continue; const pts = bez([P0.x, P0.y], A[i], R0, a, 40); const l = plen(pts);
+            if (l > 700) break; if (bestA && l > bestA.l) continue;
+            if (connOk(pts, side, true, i)) bestA = { i, pts, l };
+          }
+          if (!bestA) continue;
+          for (let k = Math.round(40 / ds); k < M * 0.45; k += Math.max(1, Math.round(15 / ds))) {
+            const j = (im + Math.round((straight / 2 - sh) / ds) + k) % M;
+            if (!calm(j)) continue; const P1 = this._rawPos(j / M, side * (hw + 18)); if (bestB && Math.hypot(R1[0] - P1.x, R1[1] - P1.y) > bestB.l) continue; const pts = bez(R1, a, [P1.x, P1.y], A[j], 40); const l = plen(pts);
+            if (l > 700) break; if (bestB && l > bestB.l) continue;
+            if (connOk(pts, side, false, j)) bestB = { i: j, pts, l };
+          }
+          if (!bestB) continue;
+          const sec = (((bestB.i - bestA.i) % M) + M) % M * ds; if (sec < 120 || sec > this.L * 0.8) continue;
+          const total = bestA.l + straight + bestB.l, score = total + Math.abs(total - sec) * 0.5 + D * 0.3 + (side !== this.side ? 400 : 0); // keep pit road on its usual side when it fits there
+          found = true; cands.push({ score, D, side, a, R0, R1, A: bestA, B: bestB, total, sec }); if (!best || score < best.score) best = cands[cands.length - 1];
+        }
+      }
+    }
+    cands.sort((p, q) => p.score - q.score);
+    for (const cand of cands.slice(0, 12)) { const c = this._buildKartPit(cand, nCars, box, lead, row, straight); if (this._kartPitOk(c)) { C[ck] = c; this._applyKartPit(c); return; } }
+    C[ck] = null; // no clean spot: keep the v1.6.2 lane
+  }
+  // the finished lane, as drawn (with the ease on / off at the branch points), keeps clear of the track everywhere
+  _kartPitOk(c) {
+    const save = { side: this.side, pitLat: this.pitLat, boxLat: this.boxLat, split: this.split, boxLat2: this.boxLat2, zones: this.zones, nBoxes: this.nBoxes, pitLane: this.pitLane };
+    this._applyKartPit(c); const z = this.zones[0], M = this.M, ds = this.L / M; let ok = true;
+    const G = new Map(); for (let i = 0; i < M; i++) { const K = Math.floor(this.X[i] / 40) * 100003 + Math.floor(this.Y[i] / 40); if (!G.has(K)) G.set(K, []); G.get(K).push(i); }
+    for (let f = z.start; f <= z.start + z.range && ok; f += 3 / this.L) { const rel = (f - z.start) * this.L, near = Math.min(rel, z.range * this.L - rel);
+      for (const u of near < 90 ? [44, 62] : [18, 31, 44, 62]) { const p = this.pos(f, this.side * (this.hw + u)); const fi = Math.round((f - Math.floor(f)) * M);
+        const gx = Math.floor(p.x / 40), gy = Math.floor(p.y / 40);
+        for (let ix = gx - 2; ix <= gx + 2 && ok; ix++) for (let iy = gy - 2; iy <= gy + 2 && ok; iy++) for (const i of G.get(ix * 100003 + iy) || []) { let di = Math.abs(i - fi); di = Math.min(di, M - di); if (near < 90 && di * ds < 140) continue; if (Math.hypot(p.x - this.X[i], p.y - this.Y[i]) < this.hw + 10) { ok = false; break; } }
+        if (!ok) break; } }
+    Object.assign(this, save); return ok;
+  }
+  _buildKartPit(best, nCars, box, lead, row, straight) {
+    const M = this.M, A = this.A;    // the lane centreline (= its track-side edge, u = 18), resampled every ~2 units, with its outward normal
+    const raw = best.A.pts.slice(0, -1); for (let s = 0; s < straight; s += 3) raw.push([best.R0[0] + Math.cos(best.a) * s, best.R0[1] + Math.sin(best.a) * s]); raw.push(...best.B.pts);
+    const cum = [0]; for (let k = 1; k < raw.length; k++) cum.push(cum[k - 1] + Math.hypot(raw[k][0] - raw[k - 1][0], raw[k][1] - raw[k - 1][1]));
+    const tot = cum[cum.length - 1], n = Math.max(8, Math.round(tot / 2)); const PL = { n, X: new Float32Array(n), Y: new Float32Array(n), A: new Float32Array(n), NX: new Float32Array(n), NY: new Float32Array(n), len: tot };
+    let j = 0; for (let k = 0; k < n; k++) { const s = k * tot / (n - 1); while (j < raw.length - 2 && cum[j + 1] < s) j++; const t = (s - cum[j]) / ((cum[j + 1] - cum[j]) || 1); PL.X[k] = raw[j][0] + (raw[j + 1][0] - raw[j][0]) * t; PL.Y[k] = raw[j][1] + (raw[j + 1][1] - raw[j][1]) * t; }
+    for (let k = 0; k < n; k++) { const p = Math.max(0, k - 1), q = Math.min(n - 1, k + 1); PL.A[k] = Math.atan2(PL.Y[q] - PL.Y[p], PL.X[q] - PL.X[p]); }
+    PL.A[0] = A[best.A.i]; PL.A[n - 1] = A[best.B.i]; // meet the track exactly at the branch points
+    for (let k = 0; k < n; k++) { PL.NX[k] = -Math.sin(PL.A[k]) * best.side; PL.NY[k] = Math.cos(PL.A[k]) * best.side; }
+    const range = (((best.B.i - best.A.i) % M) + M) % M / M;
+    const z = { n: nCars, start: best.A.i / M, range, boxA: (best.A.l + lead) / tot * range, boxB: (best.A.l + lead + row) / tot * range, boxLen: box, own: true, vk: Math.min(1, range * this.L / tot) };
+    return { side: best.side, z, PL };
+  }
+  _applyKartPit(c) {
+    const PL = c.PL; this.pitLane = { n: PL.n, len: PL.len, X: PL.X.slice(), Y: PL.Y.slice(), A: PL.A, NX: PL.NX, NY: PL.NY }; // X/Y get shifted with the track
+    if (c.side !== this.side) { this.side = c.side; this.pitLat = this.side * (this.hw + 31); this.boxLat = this.side * (this.hw + 51); }
+    this.split = false; this.boxLat2 = undefined; this.zones = [Object.assign({}, c.z)]; this.nBoxes = c.z.n;
+  }
+  // centreline position without the pit-lane warp (used while the lane is being built)
+  _rawPos(frac, lat) { const pl = this.pitLane; this.pitLane = null; const p = this.pos(frac, lat); this.pitLane = pl; return p; }
   // v1.5: box lateral for a car (Detroit's split pit lane puts every other car on the track side of the fast lane)
   boxLatFor(c) { return this.split && c && c.pside ? this.boxLat2 : this.boxLat; }
   // v1.5: map coordinates of a shape vertex (raw design units) -> track units

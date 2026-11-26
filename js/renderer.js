@@ -89,11 +89,19 @@ const Renderer = (() => {
     const pitInfo = [];
     geom.zones.forEach((z) => {
       const ps = z.start, bA = ps + z.boxA, bB = ps + z.boxB, pe = ps + z.range;
+      if (z.own) { // v1.7.1 kart tracks: a one-lane road out to the pit lane and back, widening for the boxes
+        const r = Math.min(60 / geom.L, z.boxA * 0.3), tp = Math.min(24 / geom.L, z.boxA * 0.2), te = Math.min(24 / geom.L, (z.range - z.boxB) * 0.2);
+        qlane(ps, ps + r, t => -hw + 1 - sm(t) * 19, t => -hw - 6 - sm(t) * 38, PAL[15]); qlane(ps + r - 0.0005, bA - tp, () => PO, () => -hw - 44, PAL[15]);
+        qlane(bA - tp - 0.0005, bA, () => PO, t => -hw - 44 - sm(t) * 18, PAL[15]); qlane(bB, bB + te + 0.0005, () => PO, t => PI + sm(t) * 18, PAL[15]);
+        qlane(bB + te, pe - r + 0.0005, () => PO, () => -hw - 44, PAL[15]); qlane(pe - r, pe, t => PO + sm(t) * 19, t => -hw - 44 + sm(t) * 38, PAL[15]);
+      } else {
       qlane(ps, bA, t => -hw + 1 - sm(t) * 19, t => -hw - 6 - sm(t) * 56, PAL[15]);
-      qlane(bA - 0.001, bB + 0.001, () => PO, () => PI, PAL[15]);
       qlane(bB, pe, t => PO + sm(t) * 19, t => PI + sm(t) * 56, PAL[15]);
+      }
+      qlane(bA - 0.001, bB + 0.001, () => PO, () => PI, PAL[15]);
       // inside wall line (track side of pit road) with gaps for the entry and exit lanes
-      qseg(-hw - 15, -hw - 19, bA - z.boxA * 0.25, bB + (z.range - z.boxB) * 0.2, PAL[12]); qseg(-hw - 19, -hw - 20, bA - z.boxA * 0.25, bB + (z.range - z.boxB) * 0.2, PAL[7]);
+      const iA = z.own ? ps + Math.min(60 / geom.L, z.boxA * 0.4) : bA - z.boxA * 0.25, iB = z.own ? pe - Math.min(60 / geom.L, (z.range - z.boxB) * 0.4) : bB + (z.range - z.boxB) * 0.2;
+      qseg(-hw - 15, -hw - 19, iA, iB, PAL[12]); qseg(-hw - 19, -hw - 20, iA, iB, PAL[7]);
       // fast lane / box lane divider (dashed) and the box lines
       if (geom.split) { // v1.5 Detroit: median pit lane, a row of boxes on each side of the fast lane
         for (const [d1, d2] of [[-hw - 31, -hw - 32.5], [-hw - 47.5, -hw - 49]]) for (let f = bA; f < bB; f += 10 / geom.L) qseg(d1, d2, f, f + 5 / geom.L, PAL[9]);
@@ -103,10 +111,11 @@ const Renderer = (() => {
       for (let i = 0; i <= z.n; i++) { const f = bA + (bB - bA) * i / z.n; qseg(-hw - 43, -hw - 60, f, f + 1.3 / geom.L, PAL[9]); }
       }
       // pit wall
-      qseg(-hw - 60, -hw - 64, bA - z.boxA * 0.4, bB + (z.range - z.boxB) * 0.35, PAL[9]); qseg(-hw - 64, -hw - 65.5, bA - z.boxA * 0.4, bB + (z.range - z.boxB) * 0.35, PAL[7]);
+      const wA = z.own ? bA - Math.min(20 / geom.L, z.boxA * 0.15) : bA - z.boxA * 0.4, wB = z.own ? bB + Math.min(20 / geom.L, (z.range - z.boxB) * 0.15) : bB + (z.range - z.boxB) * 0.35;
+      qseg(-hw - 60, -hw - 64, wA, wB, PAL[9]); qseg(-hw - 64, -hw - 65.5, wA, wB, PAL[7]);
       // speed-limit lines across the lane, commitment line (solid yellow) and the exit blend line
       qseg(PO, PI, bA - 4 / geom.L, bA - 2 / geom.L, PAL[9]); qseg(PO, PI, bB + 2 / geom.L, bB + 4 / geom.L, PAL[9]);
-      const pre = isRoad ? 0.008 : 0.025; qseg(-hw - 1, -hw + 1.5, ps - pre, ps + z.boxA * 0.45, PAL[8]); qseg(-hw - 1, -hw + 1.5, bB + (z.range - z.boxB) * 0.5, pe + (isRoad ? 0.006 : 0.02), PAL[8]);
+      const pre = isRoad ? 0.008 : 0.025, cl = z.own ? 40 / geom.L : 1; qseg(-hw - 1, -hw + 1.5, ps - pre, ps + Math.min(cl, z.boxA * 0.45), PAL[8]); qseg(-hw - 1, -hw + 1.5, Math.max(pe - cl, bB + (z.range - z.boxB) * 0.5), pe + (isRoad ? 0.006 : 0.02), PAL[8]);
       pitInfo.push({ z, bA, bB });
     });
     // infield garages behind pit road on ovals with room for them
@@ -118,7 +127,7 @@ const Renderer = (() => {
       // v1.6.2: no curbs from another part of the track painted across pit road (tight kart tracks run right past it)
       const pitPts = []; for (const { bA, bB } of pitInfo) for (let f = bA; f <= bB; f += 6 / geom.L) pitPts.push(geom.pos(f, Q(-hw - 40)));
       const onPit = (f, o) => { const p = geom.pos(f, o); return pitPts.some(q => Math.abs(q.x - p.x) < 26 && Math.abs(q.y - p.y) < 26 && Math.hypot(q.x - p.x, q.y - p.y) < 26); };
-      for (let i = 0; i < 400; i++) { const f0 = i / 400, f1 = (i + 0.5) / 400; if (geom.inPitZone(f0)) continue; if (!onPit(f0, hw)) seg(hw - 1, hw + 4, f0, f1, PAL[14]); if (!onPit(f0, -hw)) seg(-hw - 4, -hw + 1, f0, f1, PAL[14]); }
+      for (let i = 0; i < 400; i++) { const f0 = i / 400, f1 = (i + 0.5) / 400; if (geom.curbSkip(f0)) continue; if (!onPit(f0, hw)) seg(hw - 1, hw + 4, f0, f1, PAL[14]); if (!onPit(f0, -hw)) seg(-hw - 4, -hw + 1, f0, f1, PAL[14]); }
     }
     // v1.5 street courses: red/white curbs on the inside of each corner
     if (city) { const Lo = Street.layout(geom); for (const [f, sg] of Lo.curbs) seg(sg * (hw - 5), sg * (hw - 1), f, f + 1.6 / geom.L, ((f * geom.L / 6) | 0) % 2 ? PAL[14] : PAL[9]); }

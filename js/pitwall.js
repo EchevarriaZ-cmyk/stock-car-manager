@@ -77,7 +77,7 @@ const PW = (() => {
   const geomPts = {};
   function trackPts(tid) {
     if (geomPts[tid]) return geomPts[tid];
-    const g = new TrackGeom(tid); const pts = [];
+    const g = new TrackGeom(tid, undefined, { lite: true }); const pts = [];
     let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
     for (let i = 0; i < g.M; i += 2) { pts.push([g.X[i], g.Y[i]]); minX = Math.min(minX, g.X[i]); maxX = Math.max(maxX, g.X[i]); minY = Math.min(minY, g.Y[i]); maxY = Math.max(maxY, g.Y[i]); }
     return (geomPts[tid] = { pts, minX, minY, w: maxX - minX, h: maxY - minY });

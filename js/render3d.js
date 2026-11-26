@@ -211,7 +211,13 @@ const R3D = (() => {
       for (const z of g.zones) {
         const ps = z.start, bA = ps + z.boxA, bB = ps + z.boxB, pe = ps + z.range;
         const lane = (f0, f1, lo, li) => this.strip(f0, f1, t => Q(lo(t)), t => Q(li(t)), { mat: 'pit', flat: true, ya: 0.06, u: 40 });
-        lane(ps, bA, t => -hw + 1 - sm(t) * 19, t => -hw - 6 - sm(t) * 56); lane(bA - 0.001, bB + 0.001, () => PO, () => PI); lane(bB, pe, t => PO + sm(t) * 19, t => PI + sm(t) * 56);
+        if (z.own) { // v1.7.1 kart tracks: a one-lane road out to the pit lane and back, widening for the boxes
+          const r = Math.min(60 / g.L, z.boxA * 0.3), tp = Math.min(24 / g.L, z.boxA * 0.2), te = Math.min(24 / g.L, (z.range - z.boxB) * 0.2);
+          lane(ps, ps + r, t => -hw + 1 - sm(t) * 19, t => -hw - 6 - sm(t) * 38); lane(ps + r - 0.0005, bA - tp, () => PO, () => -hw - 44);
+          lane(bA - tp - 0.0005, bA, () => PO, t => -hw - 44 - sm(t) * 18); lane(bB, bB + te + 0.0005, () => PO, t => PI + sm(t) * 18);
+          lane(bB + te, pe - r + 0.0005, () => PO, () => -hw - 44); lane(pe - r, pe, t => PO + sm(t) * 19, t => -hw - 44 + sm(t) * 38);
+        } else { lane(ps, bA, t => -hw + 1 - sm(t) * 19, t => -hw - 6 - sm(t) * 56); lane(bB, pe, t => PO + sm(t) * 19, t => PI + sm(t) * 56); }
+        lane(bA - 0.001, bB + 0.001, () => PO, () => PI);
         const line = (a, b, f0, f1, mat) => this.strip(f0, f1, Q(a), Q(b), { mat: mat || 'paint', flat: true, ya: 0.1, u: 1e9, step: 4 });
         if (g.split) { for (const [d1, d2] of [[-hw - 31, -hw - 32.5], [-hw - 47.5, -hw - 49]]) for (let f = bA; f < bB; f += 10 / g.L) line(d1, d2, f, f + 5 / g.L);
           for (let i = 0; i <= z.n; i++) { const f = bA + (bB - bA) * i / z.n; line(-hw - 19, -hw - 31, f, f + 1.3 / g.L); line(-hw - 49, -hw - 60, f, f + 1.3 / g.L); } }
@@ -219,17 +225,17 @@ const R3D = (() => {
           for (let i = 0; i <= z.n; i++) { const f = bA + (bB - bA) * i / z.n; line(-hw - 43, -hw - 60, f, f + 1.3 / g.L); } }
         line(PO, PI, bA - 4 / g.L, bA - 2 / g.L); line(PO, PI, bB + 2 / g.L, bB + 4 / g.L);
         // pit wall (crew side) and the low wall between the track and pit road (gaps for the entry / exit lanes)
-        const w0 = bA - z.boxA * 0.4, w1 = bB + (z.range - z.boxB) * 0.35;
+        const w0 = z.own ? bA - Math.min(20 / g.L, z.boxA * 0.15) : bA - z.boxA * 0.4, w1 = z.own ? bB + Math.min(20 / g.L, (z.range - z.boxB) * 0.15) : bB + (z.range - z.boxB) * 0.35;
         this.strip(w0, w1, Q(-hw - 60), Q(-hw - 60), { mat: 'conc', flat: true, wall: 4.5 }); this.strip(w0, w1, Q(-hw - 63), Q(-hw - 63), { mat: 'conc', flat: true, wall: 4.5 });
         this.strip(w0, w1, Q(-hw - 60), Q(-hw - 63), { mat: 'conc', flat: true, ya: 4.5 });
-        const i0 = bA - z.boxA * 0.25, i1 = bB + (z.range - z.boxB) * 0.2;
+        const i0 = z.own ? ps + Math.min(60 / g.L, z.boxA * 0.4) : bA - z.boxA * 0.25, i1 = z.own ? pe - Math.min(60 / g.L, (z.range - z.boxB) * 0.4) : bB + (z.range - z.boxB) * 0.2;
         this.strip(i0, i1, Q(-hw - 15), Q(-hw - 15), { mat: 'conc', flat: true, wall: 2.5 }); this.strip(i0, i1, Q(-hw - 18), Q(-hw - 18), { mat: 'conc', flat: true, wall: 2.5 }); this.strip(i0, i1, Q(-hw - 15), Q(-hw - 18), { mat: 'conc', flat: true, ya: 2.5 });
         // crew carts behind the pit wall, team colours (merged into one mesh below)
         (this.carts = this.carts || []).push([z, bA, bB]);
       }
       // walls, fences, curbs
       const pitSpan = g.zones.map(z => [z.start - 0.004, z.start + z.range + 0.004]);
-      const outsidePit = (f) => { f = f - Math.floor(f); return !pitSpan.some(([a, b]) => (f >= a && f <= b) || (f + 1 >= a && f + 1 <= b) || (f - 1 >= a && f - 1 <= b)); };
+      const outsidePit = g.pitLane ? (f => !g.curbSkip(f)) : (f) => { f = f - Math.floor(f); return !pitSpan.some(([a, b]) => (f >= a && f <= b) || (f + 1 >= a && f + 1 <= b) || (f - 1 >= a && f - 1 <= b)); };
       const runs = (fn, n) => { const out = []; let s = null; for (let i = 0; i <= n; i++) { const f = i / n, ok = i < n && fn(f); if (ok && s === null) s = f; if (!ok && s !== null) { out.push([s, f]); s = null; } } return out; };
       if (!isRoad) { // ovals: SAFER wall + catch fence round the outside, banked with the track
         this.strip(0, 1, hw, hw, { mat: 'safer', wall: 4, u: 30 }); this.strip(0, 1, hw + 2.5, hw + 2.5, { mat: 'conc', wall: 4.6 }); this.strip(0, 1, hw, hw + 2.5, { mat: 'conc', ya: 4, yb: 4.6 });

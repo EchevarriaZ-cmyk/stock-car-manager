@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.7.1 — WHEEL TO WHEEL (Nov 25, 2026)
+- **Single-file racing with real battles** on every non-drafting track: cars run in the racing line, close up on the car ahead, pull out to pass (side by side only for a few seconds), then complete the pass or lift and tuck back in; the car being passed sometimes defends. Positions change on track instead of the field cruising two-wide.
+- **Road, street and kart tracks:** passes are started mainly into the braking zones, then the field goes back to single file.
+- **Drafting tracks keep pack racing:** Daytona, Talladega and Atlanta (the superspeedway type, now flagged `pack`) still run two- and three-wide drafting packs. Restarts stay double file everywhere; caution, pit and restart logic unchanged.
+- **Balance kept:** the time a pass gains or costs is evened out afterwards and the pace spread is recalibrated, so lap times, finishing spreads and who runs up front stay close to v1.7.
+- **Kart tracks get their own pit lane** (Orlando Kart, Ocala GP, GoPro, CMS Kart, New Castle, PittRace): a separate road branching off the track to a single straight row of full-size boxes (12 units per box for big fields, 16 for karts), placed in free space beside the track, clear of the track surface, curbs and grandstand. Fixes the shrunken cars and squeezed two-row lane with Truck / O'Reilly / Cup / IndyCar fields in Free Mode. Works in Classic and 3D.
+
 ## v1.7 — 3D Race View (Nov 25, 2026)
 - **New setting: Race View — Classic / 3D** (Settings; Classic stays the default, older settings and saves carry over). In 3D only the track and the cars are drawn in 3D (three.js r170, loaded only when 3D is used); the leaderboard, pit-wall strip, radio calls, flags, buttons and every overlay stay exactly as they were.
 - **Every track:** banked ovals (banking from the real track data) with SAFER walls, catch fences, aprons and grandstands; road courses and kart tracks as flat ribbons with red/white curbs on the bends and grass; street circuits between concrete walls and fences; pit road with the real pit boxes (two-row lanes included), pit walls and crew carts; the start/finish line.

@@ -69,7 +69,7 @@ const DATA = (() => {
     intermediate: { name: 'INTERMEDIATE', lapTime: 9, laps: 60, stages: [16, 34], fuelLaps: 26, wear: 0.0155, tireFall: 0.06,
       draftRange: 95, draft: 0.010, incident: 0.0008, laneRate: 0.8, outsidePen: 0.002, lanes: 2, paceSpacing: 40 },
     superspeedway: { name: 'SUPERSPEEDWAY', lapTime: 11, laps: 50, stages: [14, 30], fuelLaps: 22, wear: 0.007, tireFall: 0.02,
-      draftRange: 150, draft: 0.034, incident: 0.0005, laneRate: 1.4, outsidePen: 0, lanes: 3, paceSpacing: 40 },
+      draftRange: 150, draft: 0.034, incident: 0.0005, laneRate: 1.4, outsidePen: 0, lanes: 3, paceSpacing: 40, pack: true }, // v1.7.1: pack = drafting track (two- and three-wide packs)
     road: { name: 'ROAD COURSE', lapTime: 15, laps: 24, stages: [6, 13], fuelLaps: 11, wear: 0.026, tireFall: 0.05,
       draftRange: 50, draft: 0.003, incident: 0.0011, laneRate: 1.0, outsidePen: 0.004, lanes: 2, paceSpacing: 40 },
   };
@@ -439,7 +439,7 @@ const DATA = (() => {
   const POINTS = [40, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
   const XP_PER_LEVEL = 120;
   // ---------- v1.1 ----------
-  const VERSION = '1.7';
+  const VERSION = '1.7.1';
   // Driver stats shown on cards (aggression is a style: more passes, more wrecks)
   const DRIVER_STATS = [
     ['speed', 'SPEED', 'RAW PACE. THE BIGGEST PART OF LAP TIME.'],
@@ -494,6 +494,13 @@ const DATA = (() => {
     ['indyChamp', 'INDYCAR CHAMPION', 'big', 'gold', 'WIN THE INDYCAR SERIES CHAMPIONSHIP.'],
   ];
   const CHANGELOG = [
+    { v: '1.7.1', date: 'NOV 25, 2026', title: 'WHEEL TO WHEEL', items: [
+      'THE FIELD NOW RACES SINGLE FILE IN THE RACING LINE AND BATTLES FOR REAL: A FASTER CAR CLOSES UP, PULLS OUT, GOES SIDE BY SIDE FOR A FEW SECONDS AND EITHER MAKES THE PASS OR LIFTS AND TUCKS BACK IN. THE CAR AHEAD SOMETIMES DEFENDS.',
+      'ROAD, STREET AND KART TRACKS: PASSES ARE MADE INTO THE BRAKING ZONES, THEN IT IS SINGLE FILE AGAIN.',
+      'DRAFTING TRACKS (DAYTONA, TALLADEGA, ATLANTA) KEEP THEIR TWO- AND THREE-WIDE PACKS. RESTARTS ARE STILL DOUBLE FILE EVERYWHERE.',
+      'RACE PACE AND RESULTS ARE TUNED TO STAY WHERE THEY WERE: THE SAME CARS AND DRIVERS RUN UP FRONT.',
+      'KART TRACKS GET THEIR OWN PIT LANE: A SEPARATE ROAD OFF THE TRACK WITH ONE ROW OF FULL-SIZE BOXES, EVEN FOR A 40-CAR FIELD IN FREE MODE. NO MORE TINY CARS IN A CRAMPED TWO-ROW LANE. IN CLASSIC AND 3D.',
+    ] },
     { v: '1.7', date: 'NOV 25, 2026', title: '3D RACE VIEW', items: [
       'NEW SETTING - RACE VIEW: CLASSIC (THE PIXEL TRACK MAP) OR 3D. CLASSIC STAYS THE DEFAULT. IN 3D THE TRACK AND THE CARS ARE DRAWN IN 3D; THE LEADERBOARD, PIT WALL, RADIO CALLS, FLAGS AND EVERY BUTTON STAY JUST THE SAME.',
       '3D WORKS ON EVERY TRACK: BANKED OVALS WITH SAFER WALLS, CATCH FENCES AND GRANDSTANDS, ROAD COURSES AND KART TRACKS WITH CURBS AND GRASS, STREET CIRCUITS BETWEEN CONCRETE WALLS - WITH PIT ROAD, THE PIT BOXES (TWO-ROW LANES TOO) AND THE START / FINISH LINE.',

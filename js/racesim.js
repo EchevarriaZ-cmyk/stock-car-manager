@@ -50,6 +50,13 @@ const RaceSim = (() => {
       this.onEvent = opts.onEvent || (() => {});
       this.finishOrder = []; this.paused = false; this.finishT = 0; this.restartPending = false;
       this.particles = [];
+      // v1.7.1: only the drafting tracks (Daytona, Talladega, Atlanta = TYPES.superspeedway, pack: true) race in packs;
+      // everywhere else the field runs single file in the racing line and passes wheel to wheel
+      this.pack = !!this.T.pack || this.type === 'superspeedway';
+      this.brakeZ = this.type === 'road' ? this.brakeZones() : null;
+      // single file, clean passes: the old two-wide shuffle held the quick cars up in traffic; this keeps the pace spread (and results) where it was
+      // (a bigger field in a shorter lap held the quick cars up more, so the spread scales with how full a single-file lap is)
+      this.perfK = this.pack ? 0.003 : 0.0018 * U.clamp(1.24 - opts.grid.length * 36 / this.geom.L, 0.35, 1.1);
       const L = this.geom.L; const sp = 40 / L;
       this.cars = opts.grid.map((e, i) => {
         const row = Math.floor(i / 2), laneIdx = i % 2;
@@ -61,7 +68,7 @@ const RaceSim = (() => {
           tire: 1, fuel: 1, damage: 0, status: 'run', mode: e.isPlayer ? ((opts.modes && opts.modes[e.id]) || opts.mode || 'normal') : 'normal',
           pit: null, laps: 0, lapsLed: 0, stagePts: 0, perf,
           form: U.gauss() * 0.004 * (1.4 - e.cons / 100) + ((e.morale === undefined ? 70 : e.morale) - 60) * 0.00008, noise: 0, spin: 0, outT: 0, reason: '', yaw: 0,
-          stall: 0, crew: e.crew, pitCount: 0, pref: (this.type === 'superspeedway' ? U.randi(0, 1) : 0),
+          stall: 0, crew: e.crew, pitCount: 0, pref: (this.pack ? U.randi(0, 1) : 0), pass: null, passCool: 0, defT: 0, attT: -9,
           finishPos: 0, decided: false, lastFrac: 0, slowT: 0,
         };
       });
@@ -73,10 +80,24 @@ const RaceSim = (() => {
       else if (this.geom.split) { const rows = Math.ceil(n / 2); this.cars.forEach((c, i) => { c.pz = 0; c.pside = i % 2; c.stall = 1 - (Math.floor(i / 2) + 0.5) / rows; }); } // v1.5 Detroit: boxes on both sides
       else this.cars.forEach((c, i) => { c.pz = 0; c.stall = 1 - (i + 0.5) / Math.max(1, n); });
       this.cars.forEach(c => c.lastFrac = this.frac(c.d));
+      this.perfMean = this.cars.reduce((a, c) => a + c.perf, 0) / Math.max(1, this.cars.length);
       this.msg('GREEN FLAG! ' + (this.geom.event ? 'THE ' + this.geom.event + ' - ' : '') + this.laps + ' LAPS AT ' + this.geom.def.short, 'green');
       if (opts.day && typeof RD !== 'undefined') RD.initRace(this, opts.day); // v1.6 race day: radio, weather, payback, pit game
     }
     frac(d) { return d - Math.floor(d); }
+    // v1.7.1 road/street/kart: samples where a corner is coming up (the braking zones, where passes are made)
+    brakeZones() {
+      const g = this.geom, M = g.M, ds = g.L / M, z = new Uint8Array(M);
+      const dA = (a, b) => { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
+      const n1 = Math.max(1, Math.round(15 / ds)), n2 = Math.max(2, Math.round(95 / ds)), w = Math.max(1, Math.round(10 / ds));
+      for (let i = 0; i < M; i++) {
+        const here = Math.abs(dA(g.A[(i + w) % M], g.A[(i - w + M) % M]));
+        let turn = 0; for (let k = n1; k <= n2; k += Math.max(1, Math.round(n1 / 2))) turn = Math.max(turn, Math.abs(dA(g.A[(i + k) % M], g.A[i])));
+        z[i] = here < 0.12 && turn > 0.45 ? 1 : 0;
+      }
+      return z;
+    }
+    inBrakeZone(d) { if (!this.brakeZ) return true; const M = this.brakeZ.length; return !!this.brakeZ[Math.floor(this.frac(d) * M) % M]; }
     msg(text, kind) { this.log.push({ t: this.t, text, kind: kind || 'info' }); if (this.log.length > 40) this.log.shift(); this.onEvent('msg', { text, kind }); }
     player(id) { id = id || this.playerId; return this.cars.find(c => c.id === id); }
     teamCars() { return this.playerIds.map(id => this.cars.find(c => c.id === id)).filter(Boolean); }
@@ -124,7 +145,7 @@ const RaceSim = (() => {
       this.pace.active = true; this.pace.d = lead.d + 70 / this.geom.L;
       this.cautionTime = (lapsDur || U.randi(3, 4)) * this.lapTime / this.paceF;
       this.restartLanesSet = false;
-      this.cars.forEach(c => { if (c.status === 'run' && !(c.pit && c.pit.phase !== 'wait')) c.latT = this.geom.lanes[0]; c.decided = false; });
+      this.cars.forEach(c => { if (c.status === 'run' && !(c.pit && c.pit.phase !== 'wait')) c.latT = this.geom.lanes[0]; c.decided = false; c.pass = null; c.defT = 0; c.debt = 0; c.credit = 0; });
       this.msg('CAUTION: ' + reason, 'yellow');
       this.onEvent('caution', { reason });
       // decisions for all cars
@@ -206,6 +227,13 @@ const RaceSim = (() => {
         for (let k = 1; k < n; k++) { const o = byFrac[(i - k + n * 4) % n]; const gp = gapTo(o, c); if (gp > back) break; if (Math.abs(o.latT - laneLat) < 12 || Math.abs(o.lat - laneLat) < 12) return false; }
         return true;
       };
+      // v1.7.1: nearest cars in a lane (lat), ahead and behind
+      const inLane = (c, lat, range) => {
+        const i = idx.get(c); let f = null, b = null;
+        for (let k = 1; k < n; k++) { const o = byFrac[(i + k) % n]; const gp = gapTo(c, o); if (gp > range) break; if (Math.abs(o.latT - lat) < 12 || Math.abs(o.lat - lat) < 12) { f = { o, gp }; break; } }
+        for (let k = 1; k < n; k++) { const o = byFrac[(i - k + n * 4) % n]; const gp = gapTo(o, c); if (gp > range) break; if (Math.abs(o.latT - lat) < 12 || Math.abs(o.lat - lat) < 12) { b = { o, gp }; break; } }
+        return { f, b };
+      };
       const paceV = bv * this.paceF;
       if (this.pace.active) this.pace.d += paceV * dt;
       const leaderD = tc.length ? Math.max(...tc.map(c => c.d)) : 0;
@@ -217,12 +245,17 @@ const RaceSim = (() => {
         let desired;
         const inPit = c.pit && c.pit.phase !== 'wait';
         if (c.spin > 0) c.spin -= dt;
+        if (c.passCool > 0) c.passCool -= dt;
+        if ((inPit || c.status !== 'run') && c.pass) c.pass = null;
         if (inPit) {
           c.pitLap = true;
           const prog = g.pitProg(this.frac(c.d), c.pz);
-          const pv = bv * 0.5; // pit road speed limit (longer v1.3 pit roads)
+          const pv = bv * 0.5 * ((g.zones[c.pz || 0] || {}).vk || 1); // pit road speed limit (longer v1.3 pit roads; v1.7.1 vk = a kart track's own pit lane is longer than the track beside it)
           if (c.pit.phase === 'lane') {
             desired = pv;
+            // v1.7.1 kart tracks: follow the entry road off the track onto the car's own pit lane
+            if (g.pitLane && c.pit.lat0 !== null) { const zz = g.zones[c.pz || 0], rr = Math.min(60 / L, zz.boxA * 0.3); if (c.pit.lat0 === undefined) c.pit.lat0 = c.lat;
+              const t = U.clamp(prog / rr, 0, 1); c.lat = c.latT = c.pit.lat0 + (g.pitLat - c.pit.lat0) * t * t * (3 - 2 * t); if (t >= 1) c.pit.lat0 = null; }
             if (g.def.street) { const zz = g.zones[c.pz || 0]; if (prog < zz.boxA) { const t = U.clamp(prog / zz.boxA, 0, 1); const tgt = g.lanes[0] + (g.pitLat - g.lanes[0]) * t * t * (3 - 2 * t); c.latT = tgt; if (Math.abs(c.lat - tgt) > 2) c.lat += U.clamp(tgt - c.lat, -3, 3); } else if (c.latT !== g.pitLat && Math.abs(c.lat - g.pitLat) < 30) c.latT = g.pitLat; }
             if (prog >= g.boxProg(c.stall, c.pz)) {
               c.d -= Math.min(0.01, prog - g.boxProg(c.stall, c.pz)); // v1.5: stop right on the box marks (no overshoot from the step size)
@@ -252,6 +285,7 @@ const RaceSim = (() => {
             const zz = g.zones[c.pz || 0];
             // v1.5 street courses: ride the drawn exit lane back onto the track (walls right there) instead of cutting across
             if (g.def.street && prog > zz.boxB) { const t = U.clamp((prog - zz.boxB) / (zz.range - zz.boxB), 0, 1); c.lat = c.latT = g.pitLat + (g.lanes[0] - g.pitLat) * t * t * (3 - 2 * t); }
+            if (g.pitLane) { const rr = Math.min(60 / L, (zz.range - zz.boxB) * 0.3); const t = U.clamp((prog - (zz.range - rr)) / rr, 0, 1); if (t > 0) c.lat = c.latT = g.pitLat + (g.lanes[0] - g.pitLat) * t * t * (3 - 2 * t); }
             if (prog > zz.range) { c.pit = null; c.latT = g.lanes[0]; }
           }
         } else if (c.status === 'fin') {
@@ -266,10 +300,19 @@ const RaceSim = (() => {
           desired = U.clamp(desired, 0, bv * 1.05);
           if (gp < 26) desired = Math.min(desired, paceV * 0.3);
         } else {
-          let f = 1 + (c.perf - 70) * 0.003 + c.form + md.spd + c.noise - (1 - c.tire) * T.tireFall - c.damage * 0.08 + (c.adjB || 0) + (c.rdMod || 0);
+          let f = 1 + (c.perf - 70) * 0.003 + (c.perf - this.perfMean) * (this.perfK - 0.003) + c.form + md.spd + c.noise - (1 - c.tire) * T.tireFall - c.damage * 0.08 + (c.adjB || 0) + (c.rdMod || 0);
+          c.pace0 = f; // v1.7.1: the car's own pace (no draft / lane), used to decide who can make a pass stick
           const laneIdx = g.lanes.indexOf(c.latT); if (laneIdx > 0 && T.outsidePen) f -= T.outsidePen * laneIdx;
           const dr = ahead(c, T.draftRange, 18);
           if (dr) f += T.draft * Math.pow(1 - dr.gp / T.draftRange, 0.7) * (0.8 + c.e.craft / 250);
+          else if (!this.pack && !ahead(c, T.draftRange, null)) f += 0.003; // v1.7.1: clean air out front - track position counts
+          if (!this.pack) { // v1.7.1: two-wide costs the car being passed (a lapped car gives way)...
+            if (this.t - (c.passedT || -9) < 0.25) { const pen = c.passedL ? 0.045 : 0.009 - 0.005 * (c.e.craft / 100); f -= pen; c.credit = (c.credit || 0) + bv * pen * dt; }
+            // ...and the time a pass gains or loses is evened out over the next seconds, so passing reorders the field
+            // without changing anyone's race pace (results stay decided by the cars, drivers and strategy)
+            else if (c.credit > 0) { f += 0.006; c.credit -= bv * 0.006 * dt; }
+            if (c.debt > 0) { f -= 0.006; c.debt -= bv * 0.006 * dt; }
+          }
           if (this.restartT > 0) f += ((c.e.pit === undefined ? 50 : c.e.pit) - 50) * 0.0004; // restart jump
           if (this.type === 'superspeedway') {
             // bump-draft push from car behind
@@ -277,33 +320,37 @@ const RaceSim = (() => {
             if (b && b !== c && gapTo(b, c) < 48 && Math.abs(b.lat - c.lat) < 18) f += 0.006;
           }
           if (c.fuel <= 0) f *= 0.3;
+          if (c.pit && g.pitLane) { const pg = (1 - g.pitProg(this.frac(c.d), c.pz)) * L; if (pg < 90) f = Math.min(f, 0.55 + pg / 90 * 0.45); } // v1.7.1: brake for a kart track's pit road turn-off
           desired = bv * f;
-          // blocking & passing
-          const bl = ahead(c, 46, 15);
-          if (bl && desired > bl.o.v * 0.999 && !(bl.o.pit && bl.o.pit.phase !== 'wait')) {
-            const lapped = bl.o.d < c.d - 0.5;
-            const adv = U.clamp((desired / Math.max(bl.o.v, 1e-6) - 1) * 60, 0, 3);
-            const rate = T.laneRate * (0.5 + c.e.craft / 100) * (0.7 + (c.e.aggr === undefined ? 50 : c.e.aggr) / 170) * (lapped ? 4 : 1) * (1 + adv);
-            let moved = false;
-            if (U.chance(rate * dt)) {
-              const li = g.lanes.indexOf(c.latT); const opts = [li + 1, li - 1].filter(k => k >= 0 && k < g.lanes.length);
-              for (const k of U.shuffle(opts)) { if (laneFree(c, g.lanes[k], 24, lapped ? 30 : 34)) { c.latT = g.lanes[k]; moved = true; break; } }
+          if (this.pack) {
+            // blocking & passing
+            const bl = ahead(c, 46, 15);
+            if (bl && desired > bl.o.v * 0.999 && !(bl.o.pit && bl.o.pit.phase !== 'wait')) {
+              const lapped = bl.o.d < c.d - 0.5;
+              const adv = U.clamp((desired / Math.max(bl.o.v, 1e-6) - 1) * 60, 0, 3);
+              const rate = T.laneRate * (0.5 + c.e.craft / 100) * (0.7 + (c.e.aggr === undefined ? 50 : c.e.aggr) / 170) * (lapped ? 4 : 1) * (1 + adv);
+              let moved = false;
+              if (U.chance(rate * dt)) {
+                const li = g.lanes.indexOf(c.latT); const opts = [li + 1, li - 1].filter(k => k >= 0 && k < g.lanes.length);
+                for (const k of U.shuffle(opts)) { if (laneFree(c, g.lanes[k], 24, lapped ? 30 : 34)) { c.latT = g.lanes[k]; moved = true; break; } }
+              }
+              if (!moved && bl.gp < 44) desired = Math.min(desired, bl.o.v + (bl.gp - 36) / L * 2);
+            } else {
+              // drift back to preferred lane
+              const li = g.lanes.indexOf(c.latT); const pref = c.pref;
+              if (li !== pref && U.chance((this.type === 'superspeedway' ? 0.08 : 0.7) * dt)) {
+                const k = li > pref ? li - 1 : li + 1;
+                if (laneFree(c, g.lanes[k], 40, 70)) c.latT = g.lanes[k];
+              }
             }
-            if (!moved && bl.gp < 44) desired = Math.min(desired, bl.o.v + (bl.gp - 36) / L * 2);
-          } else {
-            // drift back to preferred lane
-            const li = g.lanes.indexOf(c.latT); const pref = c.pref;
-            if (li !== pref && U.chance((this.type === 'superspeedway' ? 0.08 : 0.7) * dt)) {
-              const k = li > pref ? li - 1 : li + 1;
-              if (laneFree(c, g.lanes[k], 40, 70)) c.latT = g.lanes[k];
-            }
-          }
+          } else desired = Math.max(0, this.battle(c, desired, dt, ahead, laneFree, inLane));
           if (c.spin > 0) desired = bv * 0.2;
         }
         // accel limits
         const acc = desired > c.v ? bv * 0.4 : bv * 1.2;
         c.v += U.clamp(desired - c.v, -acc * dt, acc * dt);
         if (c.pit && c.pit.phase === 'stop') c.v = 0;
+        if (c.v < 0 && !this.pack) c.v = 0; // v1.7.1: a nose-to-tail line never rolls backwards
         c.newD = c.d + c.v * dt;
       }
       // apply movement & overlap fix
@@ -426,6 +473,80 @@ const RaceSim = (() => {
       }
       for (const pt of this.particles) pt.t -= dt;
       this.particles = this.particles.filter(p => p.t > 0);
+    }
+
+    // v1.7.1 single-file racing with real passes (every track except the drafting tracks): run in the racing line, close up on
+    // the car ahead, pull out to pass (side by side only for a few seconds), complete or abort and tuck back in; the car
+    // being passed sometimes defends. Road courses: passes are started into the braking zones.
+    battle(c, desired, dt, ahead, laneFree, inLane) {
+      const g = this.geom, L = g.L, line = g.lanes[0], T = this.T;
+      const aggr = c.e.aggr === undefined ? 50 : c.e.aggr;
+      const follow = (o, gp) => { if (gp < 44) { const ov = Math.max(0, o.v); desired = Math.min(desired, Math.max(ov * (gp < 24 ? 0.85 : 0.93), ov + (gp - 36) / L * 2)); } }; // eases off without stacking the whole line up
+      const P = c.pass;
+      if (P) {
+        const o = P.o; P.t += dt;
+        let rel = (this.frac(o.d) - this.frac(c.d)) * L; if (rel > L / 2) rel -= L; if (rel < -L / 2) rel += L;
+        if (P.rel0 === undefined) P.rel0 = rel;
+        const gone = o.status !== 'run' || (o.pit && o.pit.phase !== 'wait') || Math.abs(rel) > 160;
+        const nb = inLane(c, line, 60), fg = nb.f ? nb.f.gp : 99, bg = nb.b ? nb.b.gp : 99;
+        // slot back into the line: room ahead, and the car behind gives a little room if we're clearly ahead of it
+        const slot = (minB) => { if (fg > 26 && bg > minB) { c.latT = line; c.pass = null; return true; } if (fg > 26 && nb.b && (bg > 10 || P.abort) && !nb.b.o.pass) { nb.b.o.yieldT = 0.6; nb.b.o.yieldK = P.abort ? 0.97 : 0.96; } return false; };
+        if (gone || rel < -(CAR_LEN + 4)) { // pass made
+          if (slot(30)) c.passCool = U.rand(0.6, 1.4);
+          else if (P.t > P.max + 2.5) { c.pass = null; c.passCool = 0.3; } // still out there: race the next one
+        } else if (P.t > 0.6 && Math.abs(o.lat - c.lat) < 14) { c.pass = null; c.passCool = 1; return desired; } // it moved over too: back to following
+        else if (!P.abort && ((P.t > P.max && (rel > 12 || P.t > P.max + 3)) || (P.t > 1.5 && rel > P.rel0 + 4))) P.abort = true; // not getting it done: lift and fall in behind
+        if (c.pass && P.abort) {
+          if (fg + bg < 72) { c.pass = null; c.passCool = 2; return desired; } // no hole to drop back into: carry on in the outside lane
+          desired = Math.min(desired, o.v * (rel > 0 ? 0.95 : 0.98));
+          if (rel > CAR_LEN - 4 && slot(24)) c.passCool = U.rand(2, 4.5);
+          else if (P.t > P.max + 5) { c.pass = null; c.passCool = 2; }
+        } else if (c.pass && rel > -(CAR_LEN + 4) && rel < 46) {
+          // the run built up behind carries the attacker alongside (fades after a few seconds);
+          // going two-wide costs the car being passed (a lapped car lifts to let the leaders by)
+          const boost = (P.lap ? 0.03 : 0.06 + U.clamp((c.pace0 || 1) - (o.pace0 || 1), 0, 0.02) * 2) * (0.6 + c.e.craft / 125) * (P.k || 1) * (P.t < P.max ? 1 : 0.6);
+          c.debt = (c.debt || 0) + desired * boost * dt; desired *= 1 + boost;
+          o.passedT = this.t; o.passedL = o.d < c.d - 0.5;
+        }
+        if (Math.abs(rel) < CAR_LEN + 4) o.attT = this.t;
+        const bl = ahead(c, 46, 15); if (bl && bl.o !== o) follow(bl.o, bl.gp);
+        return c.spin > 0 ? this.baseV * 0.2 : desired;
+      }
+      if (c.defT > 0) { c.defT -= dt; if (c.defT <= 0) c.latT = line; }
+      if (c.yieldT > 0) { c.yieldT -= dt; desired *= c.yieldK || 0.995; } // lifting to let a car alongside slot back in
+      const bl = ahead(c, 46, 15);
+      const settled = this.restartT <= this.lapTime * 0.3;
+      if (bl && desired > bl.o.v * 0.999 && !(bl.o.pit && bl.o.pit.phase !== 'wait')) {
+        const o = bl.o, lapped = o.d < c.d - 0.5;
+        const adv = U.clamp(((c.pace0 || 1) - (o.pace0 || 1)) * 150, 0, 3);
+        const zone = this.brakeZ ? (this.inBrakeZone(c.d) ? 3 : lapped ? 0.6 : 0.12) : 1;
+        const rate = T.laneRate * 0.6 * (0.5 + c.e.craft / 100) * (0.7 + aggr / 170) * (lapped ? 4 : 1) * (1 + adv) * zone;
+        let moved = false;
+        if (c.passCool <= 0 && bl.gp < 42 && (lapped || ((c.pace0 || 1) > (o.pace0 || 1) + 0.003 + Math.random() * 0.008 && c.v >= o.v * 0.998)) && settled && U.chance(rate * dt)) {
+          const li = g.lanes.indexOf(c.latT); const opts = [li + 1, li - 1].filter(k => k >= 0 && k < g.lanes.length);
+          for (const k of U.shuffle(opts)) {
+            if (!laneFree(c, g.lanes[k], 24, lapped ? 34 : 70)) continue;
+            const oAggr = o.e.aggr === undefined ? 50 : o.e.aggr;
+            // the car ahead sees it coming and chops across (only cars in the line, never a lapped car)
+            if (!lapped && o.latT === line && !o.pass && bl.gp > 28 && U.chance(0.1 + oAggr / 600 + o.e.craft / 1000)) {
+              o.defT = U.rand(0.8, 1.5); o.latT = line + Math.sign(g.lanes[k] - line) * 7; c.passCool = U.rand(1, 2.5); break;
+            }
+            c.latT = g.lanes[k]; c.pass = { o, t: 0, max: U.rand(2.5, 5) + (lapped ? 0 : c.e.craft / 60), abort: false, lap: lapped, k: U.rand(0.55, 1.2) }; // k: how well this run carries moved = true; break;
+          }
+        }
+        if (!moved) follow(o, bl.gp);
+      } else if (bl) follow(bl.o, bl.gp);
+      // out of the line (restart lanes, after a pass, a car that couldn't merge): slot back in when there's a gap
+      if (!c.pass && c.defT <= 0 && c.latT !== line && settled) {
+        const nb = inLane(c, line, 60), fg = nb.f ? nb.f.gp : 99, bg = nb.b ? nb.b.gp : 99;
+        if (fg > 30 && bg > 28) { if (U.chance(5 * dt)) c.latT = line; }
+        else if (fg > 30 && bg > 6) { if (nb.b.o.latT === line && !nb.b.o.pass) { nb.b.o.yieldT = 0.5; nb.b.o.yieldK = 0.96; } } // half a car ahead: the car in the line gives room
+        else if (fg <= 30 && nb.f.o.status === 'run' && !(nb.f.o.pit && nb.f.o.pit.phase !== 'wait')) {
+          if ((c.pace0 || 1) > (nb.f.o.pace0 || 1) + 0.0025 && c.passCool <= 0) c.pass = { o: nb.f.o, t: 0, max: U.rand(2, 3.5), abort: false }; // alongside and quicker: race for it
+          else desired = Math.min(desired, nb.f.o.v * (fg + bg >= 72 ? 0.96 : 0.985)); // drop in behind (only if there's a hole; a packed line keeps two lanes going)
+        }
+      }
+      return c.spin > 0 ? this.baseV * 0.2 : desired;
     }
 
     runToEnd() {
