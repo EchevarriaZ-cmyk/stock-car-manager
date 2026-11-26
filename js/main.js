@@ -16,6 +16,7 @@
   window.addEventListener('DOMContentLoaded', () => {
     VIEW.fit(); bgPattern(); rotateArt();
     Game.load();
+    if (SETTINGS.raceView === '3d' && typeof R3D !== 'undefined' && R3D.webgl()) R3D.load(); // v1.7: fetch three.js early when the 3D race view is on
     document.addEventListener('click', UI.onClick);
     Input.init();
     // v1.2.1: refit the stage at once (desktop scaling), then redraw the screen once resizing settles

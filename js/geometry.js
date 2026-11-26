@@ -41,7 +41,8 @@ class TrackGeom {
       if (def.splitPits && runs.length > 1) {
         const back = runs.filter(r => r !== front).sort((x, y) => y.len - x.len)[0];
         const n0 = Math.ceil(nCars / 2); this.zones.push(zone(front.a, front.len, n0), zone(back.a, back.len, nCars - n0));
-      } else this.zones.push(zone(front.a, front.len, nCars));
+      } else if (front.len * ds * 0.94 / nCars < 11) { this._setSplit(); this.zones.push(zone(front.a, front.len, Math.ceil(nCars / 2))); } // v1.6.2: a big field on a short frontstretch gets a double-row pit lane
+      else this.zones.push(zone(front.a, front.len, nCars));
     } else {
       let halfStraight, zone, entry, exit;
       if (sh.kind === 'rp' || (sh.kind === 'road' && def.miles)) halfStraight = this._straightHalf(sh.kind === 'road' ? 0.35 : 0.3);
@@ -49,8 +50,24 @@ class TrackGeom {
       if (def.kart) { zone = Math.min(0.17 * L, nCars * 18); entry = 26; exit = 30; } // karts: a pit / grid lane along the main straight
       else if (def.street) { const rows = this.split ? Math.ceil(nCars / 2) : nCars; zone = Math.max(150, Math.min(0.13 * L, rows * (this.split ? 22 : 11.5))); entry = 55; exit = 60; } // v1.5: tight street pit lanes stay on the main straight
       else { zone = Math.min(0.22 * L, Math.max(halfStraight * 1.6, nCars * 22)); entry = Math.max(40, halfStraight * 0.2); exit = Math.max(50, halfStraight * 0.25); }
-      const nb = this.split ? Math.ceil(nCars / 2) : nCars; const sfT = def.street && sh.pitAt !== undefined ? sh.pitAt : 0.5; // pitAt: share of the box row before the line
-      const z = { n: nb, start: 1 - (zone * sfT + entry) / L, boxA: entry / L, boxB: (entry + zone) / L }; z.range = (zone + entry + exit) / L; z.boxLen = zone / nb;
+      let nb = this.split ? Math.ceil(nCars / 2) : nCars; const sfT = def.street && sh.pitAt !== undefined ? sh.pitAt : 0.5; // pitAt: share of the box row before the line
+      let before = zone * sfT;
+      // v1.6.2: the box row has to fit on the straight. Where the old layout ran into the turns (every kart track, the
+      // tight road courses with big fields) the boxes folded over each other on the inside of the corner. Fit the row
+      // between the corners: same boxes if they fit, else shift it along the straight, then shrink the boxes (never
+      // below a car), then go to a double-row pit lane (boxes on both sides of the fast lane, like Detroit).
+      let bkB = this._straightWalk(-1, 0.2), fwB = this._straightWalk(1, 0.2);
+      if (before > bkB || zone - before > fwB || zone / nb < 9) {
+        const pref = def.kart ? 18 : def.street ? 11.5 : 22, minB = def.kart ? 11 : def.street ? 10 : 12;
+        if (!this.split && (bkB + fwB) / nCars < (def.kart ? 14 : minB)) { this._setSplit(); nb = Math.ceil(nCars / 2); } // karts would get tiny: two rows of proper boxes instead
+        if ((bkB + fwB) / nb < minB) { bkB = this._straightWalk(-1, 0.5); fwB = this._straightWalk(1, 0.5); } // a huge field on a tiny track: let the row follow a gentle bend
+        const avail = bkB + fwB;
+        const box = Math.min(this.split && !def.kart ? Math.max(pref, 22) : pref, avail / nb); zone = box * nb;
+        before = U.clamp(zone * sfT, zone - fwB, bkB);
+        const bkL = this._straightWalk(-1, 0.6), fwL = this._straightWalk(1, 0.6); // the entry/exit lanes may swing in a little later
+        entry = Math.max(20, Math.min(entry, bkL - before)); exit = Math.max(20, Math.min(exit, fwL - (zone - before)));
+      }
+      const z = { n: nb, start: 1 - (before + entry) / L, boxA: entry / L, boxB: (entry + zone) / L }; z.range = (zone + entry + exit) / L; z.boxLen = zone / nb;
       this.zones.push(z);
     }
     // zone 0 also under the v1.3 names (renderer, tests)
@@ -77,6 +94,19 @@ class TrackGeom {
     for (let a = -90; a > -270; a -= 2) { const t = a * Math.PI / 180; push(-S / 2 + r * Math.cos(t), r * Math.sin(t)); }
     for (let x = -S / 2; x < 0; x += step) push(x, fy(x));
     return pts;
+  }
+  // v1.6.2: switch to a double-row pit lane (boxes on both sides of the fast lane, the v1.5 Detroit layout)
+  _setSplit() { this.split = true; this.pitLat = this.side * (this.hw + 40); this.boxLat = this.side * (this.hw + 56); this.boxLat2 = this.side * (this.hw + 24); }
+  // v1.6.2: straight distance from the start line (dir +1 = ahead, -1 = behind) before the track turns more than maxTurn
+  // radians in total or a bend towards pit road squeezes the far edge of the boxes below 75% (they'd fold over each other)
+  _straightWalk(dir, maxTurn) {
+    const M = this.M, ds = this.L / M, lat = this.side * (this.hw + 60), w = Math.max(1, Math.round(6 / ds));
+    const ang = i => this.A[((i % M) + M) % M]; const dA = (a, b) => { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
+    let turn = 0, dist = 0;
+    for (let k = 1; k < M / 2; k++) { const i = dir * k; turn += Math.abs(dA(ang(i), ang(i - dir)));
+      const f = 1 - lat * dA(ang(i + w), ang(i - w)) / (2 * w * ds); // how much the far edge of the boxes is squeezed (< 1 = inside of a bend)
+      if (turn > maxTurn || f < 0.75) break; dist += ds; }
+    return dist;
   }
   // distance from the start line (index 0) to where the track starts turning, both ways; pit lane fits inside
   _straightHalf(maxTurn) {

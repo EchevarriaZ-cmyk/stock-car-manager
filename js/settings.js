@@ -9,10 +9,11 @@ const SETTINGS = (() => {
     { id: 'standard', name: 'STANDARD', mult: 1, desc: 'THE NORMAL LENGTH' },
     { id: 'long', name: 'LONG', mult: 1.5, desc: '50% MORE LAPS · MORE STOPS' },
   ];
-  const D = { raceLen: 'standard', tut: '' };
+  const D = { raceLen: 'standard', tut: '', raceView: 'classic', q3d: 'high' }; // v1.7: race view (classic 2D / 3D) + 3D quality
   let v = Object.assign({}, D);
   try { const j = JSON.parse(localStorage.getItem(KEY) || 'null'); if (j && typeof j === 'object') v = Object.assign({}, D, j); } catch (e) {}
   if (!RACE_LENS.some(r => r.id === v.raceLen)) v.raceLen = 'standard';
+  if (v.raceView !== '3d') v.raceView = 'classic'; if (v.q3d !== 'low') v.q3d = 'high';
   function save() { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) {} }
   return {
     RACE_LENS,
@@ -21,6 +22,10 @@ const SETTINGS = (() => {
     raceMult() { const r = RACE_LENS.find(x => x.id === v.raceLen); return r ? r.mult : 1; },
     raceLenName() { const r = RACE_LENS.find(x => x.id === v.raceLen); return r ? r.name : 'STANDARD'; },
     // tutorial state: '' = never offered, 'offered', 'skipped', 'done'
+    get raceView() { return v.raceView; },
+    set raceView(m) { v.raceView = m === '3d' ? '3d' : 'classic'; save(); },
+    get q3d() { return v.q3d; },
+    set q3d(q) { v.q3d = q === 'low' ? 'low' : 'high'; save(); },
     get tut() { return v.tut; },
     set tut(s) { v.tut = s; save(); },
   };

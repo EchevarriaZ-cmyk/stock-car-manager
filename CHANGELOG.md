@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.7 — 3D Race View (Nov 25, 2026)
+- **New setting: Race View — Classic / 3D** (Settings; Classic stays the default, older settings and saves carry over). In 3D only the track and the cars are drawn in 3D (three.js r170, loaded only when 3D is used); the leaderboard, pit-wall strip, radio calls, flags, buttons and every overlay stay exactly as they were.
+- **Every track:** banked ovals (banking from the real track data) with SAFER walls, catch fences, aprons and grandstands; road courses and kart tracks as flat ribbons with red/white curbs on the bends and grass; street circuits between concrete walls and fences; pit road with the real pit boxes (two-row lanes included), pit walls and crew carts; the start/finish line.
+- **Cars:** stock cars, trucks, open-wheel cars and karts in team colours with their numbers. The owner's cars wear a yellow (car 1) or cyan (car 2) marker — you are the team owner, never the driver.
+- **Cameras:** TV cam (high broadcast angle, follows your selected car or the leader) and Chase, on the existing camera button (C on a keyboard).
+- **Weather:** rain darkens the sky, adds rain streaks and gives the track a wet look.
+- **3D Quality: Low / High** (Low = no shadows, pixel ratio 1; High = 1024 shadow map, pixel ratio up to 2). Drawn only while the race screen is visible.
+- **Fallbacks:** no WebGL = the race runs in the Classic view (with a note); if the phone drops the 3D view mid-race, the rest of the race carries on in Classic.
+- Includes the v1.6.2 pit box fix.
+
+## v1.6.2 — Pit box fix (Nov 25, 2026)
+- **Pit boxes never overlap or run into the turns.** The pit row on road, kart and street tracks is now fitted between the corners: it keeps its boxes if they fit, shifts along the straight, shrinks the boxes (never below a car), and switches to a **two-row pit lane** (boxes on both sides of the fast lane, the Detroit layout) when the straight is too short.
+- **All 6 kart tracks** (Orlando, Ocala, GoPro, CMS Kart, New Castle, PittRace) had their 16 boxes folding over each other in the hairpin; they now get a straight two-row pit / grid lane.
+- Big fields on short ovals (Phoenix, Richmond, Iowa, Dover, New Hampshire, Gateway, Nashville with 28-40 cars) get a two-row pit lane instead of tiny boxes; tight road courses with big fields (Sonoma, Watkins Glen, COTA, Barber, Mid-Ohio, Laguna Seca, Long Beach) keep their boxes off the corners.
+- Curbs from another part of a tight track are no longer painted across pit road.
+- The in-game version label now says V1.6.2 (it still said V1.6 after the 1.6.1 patch).
+
 ## v1.6 — Owner's Box (Nov 24, 2026)
 *The business side of the team (charters, rivals, manufacturers) and race day (driver radio, pit crew, weather, driver drama).*
 - **You are still the owner / manager, never the driver.**

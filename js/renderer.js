@@ -115,7 +115,10 @@ const Renderer = (() => {
     if (bigInfield) { seg(-hw - 84, -hw - 108, gA, gB, PAL[12]); for (let f = gA; f < gB; f += 14 / geom.L) seg(-hw - 86, -hw - 106, f, f + 6 / geom.L, PAL[11]); }
     // road course curbs (red/white) at turn-ish areas: alternate along all edges
     if (isRoad && !street) {
-      for (let i = 0; i < 400; i++) { const f0 = i / 400, f1 = (i + 0.5) / 400; if (geom.inPitZone(f0)) continue; seg(hw - 1, hw + 4, f0, f1, PAL[14]); seg(-hw - 4, -hw + 1, f0, f1, PAL[14]); }
+      // v1.6.2: no curbs from another part of the track painted across pit road (tight kart tracks run right past it)
+      const pitPts = []; for (const { bA, bB } of pitInfo) for (let f = bA; f <= bB; f += 6 / geom.L) pitPts.push(geom.pos(f, Q(-hw - 40)));
+      const onPit = (f, o) => { const p = geom.pos(f, o); return pitPts.some(q => Math.abs(q.x - p.x) < 26 && Math.abs(q.y - p.y) < 26 && Math.hypot(q.x - p.x, q.y - p.y) < 26); };
+      for (let i = 0; i < 400; i++) { const f0 = i / 400, f1 = (i + 0.5) / 400; if (geom.inPitZone(f0)) continue; if (!onPit(f0, hw)) seg(hw - 1, hw + 4, f0, f1, PAL[14]); if (!onPit(f0, -hw)) seg(-hw - 4, -hw + 1, f0, f1, PAL[14]); }
     }
     // v1.5 street courses: red/white curbs on the inside of each corner
     if (city) { const Lo = Street.layout(geom); for (const [f, sg] of Lo.curbs) seg(sg * (hw - 5), sg * (hw - 1), f, f + 1.6 / geom.L, ((f * geom.L / 6) | 0) % 2 ? PAL[14] : PAL[9]); }

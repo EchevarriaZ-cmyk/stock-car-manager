@@ -683,6 +683,9 @@ const UI = (() => {
     render(page('SETTINGS', `<div class="cols"><div class="col">
       <div class="panel"><h3>RACE LENGTH</h3><div class="small" style="line-height:1.5;margin-bottom:6px">${cur.desc}. CAREER AND FREE MODE. STARTS WITH YOUR NEXT RACE. (LAPS SHOWN FOR CHARLOTTE.)</div><div class="seg c4 len-pick">${rl}</div></div>
       ${seasonPanel}</div><div class="col">
+      <div class="panel"><h3>RACE VIEW</h3><div class="small" style="line-height:1.5;margin-bottom:6px">CLASSIC = THE PIXEL TRACK MAP. 3D = A TV-STYLE 3D TRACK (TV CAM / CHASE ON THE CAMERA BUTTON). THE LEADERBOARD AND PIT WALL STAY THE SAME.</div>
+        <div class="seg c2 rv-pick"><button class="btn ${SETTINGS.raceView === 'classic' ? 'green sel' : 'dark'}" style="min-height:48px" data-act="raceView" data-arg="classic">CLASSIC</button><button class="btn ${SETTINGS.raceView === '3d' ? 'green sel' : 'dark'}" style="min-height:48px" data-act="raceView" data-arg="3d">3D</button></div>
+        ${SETTINGS.raceView === '3d' ? `<div class="small" style="margin:6px 0 4px">3D QUALITY: LOW = FASTER, HIGH = SHADOWS + SHARPER</div><div class="seg c2 q3-pick"><button class="btn ${SETTINGS.q3d === 'low' ? 'yellow sel' : 'dark'}" style="min-height:48px" data-act="q3d" data-arg="low">LOW</button><button class="btn ${SETTINGS.q3d === 'high' ? 'yellow sel' : 'dark'}" style="min-height:48px" data-act="q3d" data-arg="high">HIGH</button></div>` : ''}</div>
       <div class="panel"><h3>TUTORIAL</h3><div class="small" style="line-height:1.5;margin-bottom:6px">A 1-MINUTE TOUR WITH A PRACTICE TEAM. YOUR SAVE IS NOT TOUCHED.</div><button class="btn orange wide" style="min-height:48px" data-act="tutStart"${KB('t', 'T')}>${T('PLAY THE TUTORIAL', 2)}</button></div>
       <button class="btn blue wide" style="min-height:48px" data-act="go" data-arg="profile">PROFILE & SAVE</button>
       <button class="btn dark wide" style="min-height:48px" data-act="go" data-arg="updates">UPDATE LOG · V${DATA.VERSION}</button></div></div>`));
@@ -790,6 +793,7 @@ const UI = (() => {
       <div class="fx" id="fx"></div><div class="lthird" id="lt"></div><div class="pitclock" id="pitclock"></div>
       <div class="race-ticker ol1" id="ticker"></div><div class="race-side pw3" id="side"></div><div id="pitcard"></div><div class="race-banner" id="banner" hidden></div></div></div>`);
     R.view = new Renderer.RaceView($('#rc'), R.race); R.view.followId = R.sel;
+    if (SETTINGS.raceView === '3d') use3D(R); // v1.7: 3D race view (track + cars only; every overlay stays)
     placeOverlays(); renderTop(); renderSide(); updateTower(); raceEvent('msg', R.race.log[R.race.log.length - 1]);
     // start graphic: grid info + the light sequence, then the green flag
     const me = R.race.player('P'); const startP = me ? R.race.positionOf(me) : 0;
@@ -802,13 +806,33 @@ const UI = (() => {
       const race = R.race;
       if (R.hold > 0) { R.hold -= dt; if (R.hold <= 0) splash('GREEN FLAG', 'green', 'LAP 1 OF ' + race.laps); }
       else if (!race.paused && !R.tutPause && race.phase !== 'done') { let st = dt * R.speed; while (st > 1e-6) { const k = Math.min(1 / 30, st); race.step(k); st -= k; if (race.paused || race.phase === 'done') break; } }
-      try { R.view.draw(dt); } catch (e) { console.error(e); }
+      try { R.view.draw(dt); } catch (e) { console.error(e); if (R.view3 && R.view === R.view3) fallback2D(R, '3D VIEW FAILED - CLASSIC VIEW FOR THE REST OF THE RACE'); }
       pitClock();
       R.lastTower += dt; if (R.lastTower > 0.25) { R.lastTower = 0; updateTower(); updateSide(); }
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
   }
+  // v1.7 3D race view: three.js is fetched the first time; until it is ready (or without WebGL) the classic view keeps running
+  function use3D(R) {
+    if (typeof R3D === 'undefined') return;
+    if (!R3D.webgl()) { toast('3D VIEW NEEDS WEBGL - USING THE CLASSIC VIEW'); return; }
+    const go3 = () => {
+      if (ui.race !== R || R.stopped || R.no3d || R.view3) return;
+      try {
+        const v = new R3D.View(R.race, { hi: SETTINGS.q3d === 'high' }); const host = $('.race-main.full'), c2 = $('#rc'); if (!host || !c2) { v.dispose(); return; }
+        v.attach(host, c2.nextSibling); c2.style.display = 'none'; v.followId = R.sel; R.view2 = R.view; R.view = R.view3 = v;
+        placeOverlays(); const t = $('#tvtop'); if (t) t._k = ''; renderTop();
+      } catch (e) { console.error(e); fallback2D(R, '3D VIEW FAILED - CLASSIC VIEW'); }
+    };
+    if (R3D.loaded) go3(); else R3D.load().then(m => { if (m) go3(); else if (ui.race === R) toast('3D VIEW COULD NOT LOAD - CLASSIC VIEW'); });
+  }
+  function fallback2D(R, msg) {
+    if (!R) return; R.no3d = true; const v = R.view3; R.view3 = null; if (R.view2) R.view = R.view2;
+    if (v) { try { v.dispose(); } catch (e) {} } const c = $('#rc'); if (c) c.style.display = '';
+    if (R.view && R.view.resize) { R.view.key = ''; R.view.resize(); } const t = $('#tvtop'); if (t) t._k = ''; if (ui.race === R) { renderTop(); toast(msg); }
+  }
+  if (typeof R3D !== 'undefined') R3D.onLost(() => { const R = ui.race; if (R && R.view3) fallback2D(R, '3D VIEW LOST - CLASSIC VIEW FOR THE REST OF THE RACE'); });
   // timed overlays (start graphic, splashes, lower thirds); CSS animates them with transform/opacity only
   function fxShow(key, html, ms, where) {
     const R = ui.race; const host = $(where || '#fx'); if (!R || !host) return;
@@ -850,7 +874,7 @@ const UI = (() => {
     const R = ui.race; const el = $('#tvtop'); if (!el || !R) return; const race = R.race; const s = S();
     const flag = flagState(race); const ll = race.leaderLaps(); const lap = Math.min(race.laps, Math.max(1, ll + (race.phase === 'racing' ? 1 : 0)));
     const stg = !race.stages.length ? '' : race.stage <= race.stages.length ? 'STAGE ' + race.stage : 'FINAL STAGE';
-    const team = race.teamCars(); const camLbl = R.view && R.view.mode === 'follow' ? 'FOLLOW' : 'TRACK';
+    const team = race.teamCars(); const camLbl = R.view && R.view.camLabel ? R.view.camLabel() : R.view && R.view.mode === 'follow' ? 'FOLLOW' : 'TRACK';
     const wx = typeof RDUI !== 'undefined' && RDUI ? RDUI.topIcon(race) : '';
     const key = [flag, lap, stg, R.sel, R.speed, camLbl, race.phase, wx].join('|'); if (el._k === key) return; el._k = key;
     if (R.white === false && flag === 'white') { R.white = true; splash('WHITE FLAG', 'white', 'FINAL LAP!'); }
@@ -859,7 +883,7 @@ const UI = (() => {
       : `<span class="tvt-team">${T(s.team.name.length > 16 ? s.team.name.slice(0, 16) : s.team.name, 2, SH)}</span>`;
     const ft = { green: '', yellow: 'CAUTION ', white: 'WHITE FLAG ', checker: 'FINISH ' }[flag];
     el.innerHTML = `<div class="tvt-l">${left}</div><div class="tvt-mid"><span class="flagico f-${flag}"><i></i></span>${wx}<span class="tvt-lap">${ft}LAP ${lap}/${race.laps}</span>${stg ? `<span class="tvt-stg">${stg}${race.stage <= race.stages.length ? ' · ENDS L' + race.stages[race.stage - 1] : ''}</span>` : ''}</div>
-      <div class="tvt-r">${race.phase === 'done' ? '' : `<button class="tvt-btn" data-act="raceCam"${KB('c')}>${camLbl === 'FOLLOW' ? 'FOLLOW' : 'TRACK'}</button><button class="tvt-btn ${R.speed === 4 ? 'sel' : ''}" data-act="raceSpeed" data-arg="${R.speed === 4 ? 1 : 4}"${KB('f', 'F')}>${R.speed}X</button><button class="tvt-btn skip" data-act="raceSkip">SKIP &#9654;&#9654;</button>`}</div>`;
+      <div class="tvt-r">${race.phase === 'done' ? '' : `<button class="tvt-btn" data-act="raceCam"${KB('c')}>${camLbl}</button><button class="tvt-btn ${R.speed === 4 ? 'sel' : ''}" data-act="raceSpeed" data-arg="${R.speed === 4 ? 1 : 4}"${KB('f', 'F')}>${R.speed}X</button><button class="tvt-btn skip" data-act="raceSkip">SKIP &#9654;&#9654;</button>`}</div>`;
   }
   const PIT_LABEL = { four: '4 TIRES', two: '2 TIRES', fuel: 'FUEL ONLY', stay: 'STAY OUT' };
   const PIT_ICON = { four: 'four', two: 'two', fuel: 'fuel', stay: 'flag', cancel: 'flag' };
@@ -1153,7 +1177,7 @@ const UI = (() => {
     startRace: () => startRace(),
     raceSpeed: (k) => { ui.race.speed = +k; renderTop(); },
     raceMode: (m) => { ui.race.race.setMode(m, ui.race.sel); renderSide(); },
-    raceCam: () => { const v = ui.race.view; v.setMode(v.mode === 'follow' ? 'full' : 'follow'); renderTop(); },
+    raceCam: () => { const v = ui.race.view; if (v.cycle) v.cycle(); else v.setMode(v.mode === 'follow' ? 'full' : 'follow'); renderTop(); }, // v1.7: in 3D it cycles TV CAM / CHASE
     racePit: () => { const R = ui.race; if (!R || R.race.phase === 'done') return; const pc = R.race.player(R.sel); if (!pc || pc.status !== 'run' || pc.pit) return; R.card = false; R.menu = { kind: 'green' }; renderSide(); },
     pitAdj: () => { const R = ui.race; if (!R) return; R.adj = !R.adj; renderSide(); },
     towerMode: () => { const R = ui.race; if (!R) return; R.collapsed = !R.collapsed; ui.boardCollapsed = R.collapsed; placeOverlays(); const h = $('#tw-head'); if (h) h._k = ''; updateTower(); },
@@ -1166,6 +1190,8 @@ const UI = (() => {
     ncLen: (a) => { readNC(); ui.nc.len = +a; newCareerScreen(); },
     seasonLen: (a) => { Game.setSeasonLen(+a); if (ui.screen === 'seasonEnd') seasonEnd(); else settings(); toast('NEXT SEASON: ' + (+a ? a + ' RACES' : 'THE FULL SEASON')); },
     raceLen: (a) => { SETTINGS.raceLen = a; settings(); toast('RACE LENGTH: ' + SETTINGS.raceLenName() + ' (FROM THE NEXT RACE)'); },
+    raceView: (a) => { SETTINGS.raceView = a; if (a === '3d' && typeof R3D !== 'undefined') { if (R3D.webgl()) R3D.load(); else toast('THIS DEVICE HAS NO WEBGL - RACES USE THE CLASSIC VIEW'); } settings(); if (a !== '3d' || R3D.webgl()) toast('RACE VIEW: ' + (a === '3d' ? '3D' : 'CLASSIC') + ' (FROM THE NEXT RACE)'); },
+    q3d: (a) => { SETTINGS.q3d = a; settings(); toast('3D QUALITY: ' + (a === 'low' ? 'LOW' : 'HIGH')); },
     tutStart: () => { closeModal(); if (typeof TUT !== 'undefined') TUT.start(); },
     tutSkip: () => { closeModal(); SETTINGS.tut = 'skipped'; toast('NO PROBLEM - THE TUTORIAL IS IN SETTINGS ANYTIME'); },
     seasonChoice: (a) => {
