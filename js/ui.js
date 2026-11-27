@@ -50,7 +50,7 @@ const UI = (() => {
     return `<div class="screen page">${pageHead(title, extra)}<div class="page-body">${body}</div></div>`;
   }
   function render(html) { app().innerHTML = html; }
-  const NEW_ART = { garageHub: 1, driversHub: 1, trophyHub: 1 };
+  const NEW_ART = { garageHub: 1, driversHub: 1, trophyHub: 1, hq: 1 };
   function artURL(kind, w, h, opt) {
     const key = kind + w + 'x' + h + JSON.stringify(opt || {});
     if (!ui.artCache[key]) ui.artCache[key] = PW.hubTile(kind, w, h, opt).toDataURL();
@@ -131,7 +131,7 @@ const UI = (() => {
       const k = NEW_ART[kind] ? 2 : 1.45; const w = opts.w || tw;
       const aw = Math.round((w - 10) / k), ah = Math.round((th - 10) / k);
       return `<button class="ptile ${locked ? 'locked' : ''} ${opts.cls || ''}" style="grid-area:${area}" data-act="${locked ? 'needCareer' : 'go'}" data-arg="${act}"${opts.kb && !locked ? KB(opts.kb, 'ENTER') : ''}>
-        <span class="pt-art"><img class="art" src="${artURL(kind, aw, ah, { livery: lv, number: num })}" alt=""></span>${lab(label, w)}${opts.badge ? `<span class="badge">${opts.badge}</span>` : ''}</button>`;
+        <span class="pt-art"><img class="art" src="${artURL(kind, aw, ah, Object.assign({ livery: lv, number: num }, opts.art || {}))}" alt=""></span>${lab(label, w)}${opts.badge ? `<span class="badge">${opts.badge}</span>` : ''}</button>`;
     };
     const nextTrack = has && !s.seasonOver ? DATA.TRACKS[s.schedule[s.week - 1]] : null;
     let tiles = '';
@@ -139,14 +139,15 @@ const UI = (() => {
     tiles += artTile('garage', 'garageHub', 'GARAGE', '1 / 3 / 2 / 5', { badge: has && !Game.hasCar() ? 'BUY CAR!' : has && s.team.rnd.length ? 'R&D' : '' });
     const needDrv = has && (!s.team.driverId || (s.team.car2 && !s.team.car2.driverId));
     tiles += artTile('drivers', 'driversHub', 'DRIVERS', '1 / 5 / 2 / 7', { badge: needDrv ? 'NEED!' : has && Game.prospects().length ? Game.prospects().length + ' SCOUTED' : '' });
-    tiles += artTile('facilities', 'facilities', 'FACILITIES', '1 / 7 / 2 / 9', { badge: has && s.team.builds.length ? 'BUILD' : '' });
+    // v1.10: TEAM HQ is the campus front-end for the facilities (the list stays under LIST VIEW)
+    tiles += artTile('hq', 'hq', 'TEAM HQ', '1 / 7 / 2 / 9', { badge: has && s.team.builds.length ? 'BUILD' : '', art: has && typeof HQ !== 'undefined' && HQ ? { k: HQ.artKey() } : {} });
     tiles += artTile('sponsors', 'sponsors', 'SPONSORS', '1 / 9 / 2 / 11', { badge: has && s.offers.length ? s.offers.length + ' OFFER' + (s.offers.length > 1 ? 'S' : '') : '' });
     // career tile (wide): art + label, live info, road-to-the-cup bar
     const cw = tw * 2 + M.gap; const artW = Math.round(cw * 0.58); const artH = Math.max(40, th - 62);
     let info = '';
     if (has) {
       const sr = Game.ser(); const pos = s.results.length ? U.ordinal(Game.teamBestPos()) + ' IN PTS' : 'NO PTS YET';
-      info = `${T(sr.short, sr.short.length > 7 ? 2 : 2, SH)}<span>SEASON ${s.year}</span><span>${s.seasonOver ? 'SEASON DONE' : 'RACE ' + s.week + '/' + Game.nRaces()}</span><span>${pos}</span><span class="neon">${s.mode === 'owner' ? 'OWNER' : 'BOSS ' + Math.round(s.hired.confidence) + '%'}</span>`;
+      info = `${T(sr.short, sr.short.length > 7 ? 2 : 2, SH)}<span class="ct-fans">${Game.fansShort(s.fans || 0)} FANS</span><span>${s.seasonOver ? 'SEASON DONE' : 'RACE ' + s.week + '/' + Game.nRaces()}</span><span>${pos}</span><span class="neon">${s.mode === 'owner' ? 'OWNER' : 'BOSS ' + Math.round(s.hired.confidence) + '%'}</span>`;
     } else info = `${T('NEW', 2, { color: NEON, shadow: '#0d0e10' })}<span>START IN KARTS</span><span>OWN OR GET HIRED</span><span class="neon">${VIEW.desktop ? 'CLICK TO START' : 'TAP TO START'}</span>`;
     tiles += `<button class="ptile career-tile" style="grid-area:2 / 1 / 3 / 5" data-act="go" data-arg="career"${has ? '' : KB('enter space', 'ENTER')}>
       <span class="ct-top"><span class="ct-art" style="width:${artW}px"><img class="art" src="${artURL('career', Math.round(artW / 1.45), Math.round(artH / 1.45), { livery: lv, number: num })}" alt="">${lab(has ? 'CAREER\nMODE' : 'NEW\nCAREER', artW)}</span><span class="ct-info">${info}</span></span>
@@ -504,7 +505,7 @@ const UI = (() => {
     pitCenter: `PIT CREW ${Math.round(Math.min(1.1, 0.35 + l * 0.12) * 100)}% · FEWER MISTAKES`,
     windTunnel: `+${((l - 1) * 1.5).toFixed(1)} AERO ON EVERY CAR`,
     chassisRig: `+${((l - 1) * 1.5).toFixed(1)} CHASSIS ON EVERY CAR`,
-    fanShop: `MERCH SALES +${(l - 1) * 35}%`,
+    fanShop: `MERCH SALES +${(l - 1) * 35}%`, // v1.10: shown as the MERCH STORE in TEAM HQ
   })[k];
   function facilities() {
     ui.screen = 'facilities'; const s = S();
@@ -517,7 +518,7 @@ const UI = (() => {
           : c ? `<button class="btn ${s.money >= c.money ? 'green' : 'grey'} wide" style="margin-top:8px" data-act="build" data-arg="${k}">UPGRADE TO LV ${l + 1} · ${U.moneyShort(c.money)} · ${c.days} DAYS</button>` : '<div class="small" style="margin-top:8px">MAX LEVEL</div>'}</div>`;
     });
     render(page('FACILITIES', `<div class="fac-grid">${cards.join('')}</div>
-      <div class="panel small" style="margin-top:10px">WEEKLY UPKEEP: ${U.money(Game.facUpkeep())} · MERCH LAST WEEK COMES FROM REP, RESULTS AND THE FAN SHOP · FACILITIES CARRY OVER WHEN YOU MOVE UP A SERIES (MAX LEVEL ${DATA.FAC_MAX}).</div>`));
+      <div class="panel small" style="margin-top:10px">WEEKLY UPKEEP: ${U.money(Game.facUpkeep())} · MERCH COMES FROM YOUR FANS, RESULTS AND THE MERCH STORE · SEE IT ALL IN TEAM HQ · FACILITIES CARRY OVER WHEN YOU MOVE UP A SERIES (MAX LEVEL ${DATA.FAC_MAX}).</div>`));
   }
   // ---------- SPONSORS ----------
   function spCard(sp, slot, idx) {
@@ -1016,7 +1017,7 @@ const UI = (() => {
     }
     render(page('RACE RESULTS', `<div class="cols"><div class="col narrow"><div class="panel ${bestPos === 1 ? 'orange' : bestPos <= 10 ? 'green' : 'red'}" style="text-align:center">${head}</div>${notes}
       <div class="panel small res-money" style="line-height:1.7">${lines}<div class="row" style="justify-content:space-between;border-top:2px solid #1b1b1b;margin-top:4px"><b>NET</b><b style="color:${sum.net < 0 ? '#ff6b6b' : '#7dff7d'}">${sum.net < 0 ? '-' : '+'}${U.money(Math.abs(sum.net))}</b></div></div>
-      <div class="panel small" style="line-height:1.6">REP ${sum.repD >= 0 ? '+' : ''}${sum.repD.toFixed(1)} · XP +${sum.xp}${sum.levelUp ? ' · <span style="color:#ffd000">LEVEL UP! LV ' + s.level + '</span>' : ''}${sum.drvUp && sum.drvUp.length ? '<br>' + sum.drvUp.map(([d, k]) => U.esc(Game.driverShort(d)) + ' +1 ' + (DATA.DRIVER_STATS.find(x => x[0] === k) || [k, k])[1]).join(' · ') : ''}${sum.confD !== undefined ? '<br>BOSS CONFIDENCE ' + (sum.confD >= 0 ? '+' : '') + sum.confD.toFixed(0) + ' (NOW ' + Math.round(s.hired ? s.hired.confidence : 0) + '%)' : ''}</div>
+      <div class="panel small" style="line-height:1.6">REP ${sum.repD >= 0 ? '+' : ''}${sum.repD.toFixed(1)}${sum.fansD !== undefined ? ' · FANS ' + (sum.fansD >= 0 ? '+' : '') + sum.fansD.toLocaleString('en-US') + ' (' + Game.fansShort(s.fans) + ')' : ''} · XP +${sum.xp}${sum.levelUp ? ' · <span style="color:#ffd000">LEVEL UP! LV ' + s.level + '</span>' : ''}${sum.drvUp && sum.drvUp.length ? '<br>' + sum.drvUp.map(([d, k]) => U.esc(Game.driverShort(d)) + ' +1 ' + (DATA.DRIVER_STATS.find(x => x[0] === k) || [k, k])[1]).join(' · ') : ''}${sum.confD !== undefined ? '<br>BOSS CONFIDENCE ' + (sum.confD >= 0 ? '+' : '') + sum.confD.toFixed(0) + ' (NOW ' + Math.round(s.hired ? s.hired.confidence : 0) + '%)' : ''}</div>
       <button class="btn green wide" style="min-height:56px" data-act="afterResults"${KB('enter space', 'ENTER')}>${T('CONTINUE >', 2)}</button></div>
       <div class="col"><div class="panel" style="padding:4px">${resultsTable(r)}</div></div></div>`));
   }
@@ -1232,7 +1233,7 @@ const UI = (() => {
   }
   const run = (act, arg) => { const f = A[act]; if (f) f(arg); };
   // v1.6: other modules (js/business.js) add screens and actions and reuse the page chrome
-  const h = { page, T, render, modal, closeModal, confirmBox, toast, KB, SH, NEON, TAP };
+  const h = { page, T, render, modal, closeModal, confirmBox, toast, KB, SH, NEON, TAP, facEffect, bar };
   function extend(screens, acts) { const prev = {}; for (const k of Object.keys(acts || {})) prev[k] = A[k]; Object.assign(SCREENS, screens || {}); Object.assign(A, acts || {}); return prev; }
   return { h, extend, hub, go, onClick, onResize, toast, ui, refresh, maybeWhatsNew, whatsNew, podium, trophies, prep, startRace, results, finishRaceAndShowResults, settings, run, closeModal, modal, tutOffer };
 })();

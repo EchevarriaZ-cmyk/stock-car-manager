@@ -366,7 +366,7 @@ const DATA = (() => {
     // v1.3
     windTunnel: { name: 'WIND TUNNEL', desc: 'Extra aero on every car. Big on intermediates and in the draft.' },
     chassisRig: { name: 'CHASSIS RIG', desc: 'Extra chassis grip. Wins short tracks, road courses and kart tracks.' },
-    fanShop: { name: 'FAN SHOP', desc: 'Sells merch: caps, shirts, die-cast cars. More money every race.' },
+    fanShop: { name: 'MERCH STORE', desc: 'Sells caps, shirts and die-cast cars. Merch money every race grows with your fans.' },
   };
   const FAC_MAX = 8;
   const FAC_COST = [0, 0, 70000, 140000, 260000, 450000, 700000, 1000000, 1400000]; // cost to reach level index
@@ -439,7 +439,7 @@ const DATA = (() => {
   const POINTS = [40, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
   const XP_PER_LEVEL = 120;
   // ---------- v1.1 ----------
-  const VERSION = '1.9';
+  const VERSION = '1.10';
   // Driver stats shown on cards (aggression is a style: more passes, more wrecks)
   const DRIVER_STATS = [
     ['speed', 'SPEED', 'RAW PACE. THE BIGGEST PART OF LAP TIME.'],
@@ -495,6 +495,12 @@ const DATA = (() => {
     ['indyChamp', 'INDYCAR CHAMPION', 'big', 'gold', 'WIN THE INDYCAR SERIES CHAMPIONSHIP.'],
   ];
   const CHANGELOG = [
+    { v: '1.10', date: 'NOV 27, 2026', title: 'TEAM HQ', items: [
+      'NEW: TEAM HQ - A PIXEL-ART CAMPUS FOR YOUR RACE SHOP. TAP A BUILDING TO SEE ITS LEVEL, WHAT IT DOES AND TO UPGRADE IT. BUILDINGS GROW AS THEY LEVEL UP: BIGGER, MORE DETAIL, LIGHTS, HAULERS AND FLAGS.',
+      'YOUR FACILITIES ARE THE HQ BUILDINGS: UPGRADING IN TEAM HQ IS THE SAME AS UPGRADING ON THE FACILITIES LIST (STILL THERE UNDER LIST VIEW). THE FAN SHOP IS NOW THE MERCH STORE.',
+      'NEW STAT: FANS. WINS, TOP 5S, TOP 10S AND PLAYOFF RUNS GROW YOUR FAN BASE; BAD RACES LOSE A FEW. FANS SHOW ON THE HUB, IN TEAM HQ AND AFTER EVERY RACE.',
+      'MERCH SALES NOW GROW WITH YOUR FANS. NEW BUILDINGS: FAN ZONE (FANS GROW FASTER) AND HOSPITALITY SUITES (BETTER SPONSOR OFFERS). OLD SAVES GET FANS FROM THEIR REP AND RESULTS.',
+    ] },
     { v: '1.9', date: 'NOV 27, 2026', title: 'OWNER LEAGUE', items: [
       'NEW: OWNER LEAGUE - ONLINE SEASONS FOR 2 TO 8 TEAM OWNERS ON GAME JOLT. CREATE A LEAGUE (NAME, 6 / 10 / 16 REAL CUP TRACKS, MAX OWNERS) AND SHARE ITS 6-CHARACTER CODE, OR JOIN WITH A CODE. YOU ARE THE OWNER, NEVER THE DRIVER.',
       'BUILD A LEAGUE TEAM: NAME, CAR NUMBER, CHEVY / FORD / TOYOTA / DODGE AND ONE DRIVER FROM A POOL (ALL RATED THE SAME, EACH WITH HIS OWN STRENGTH). EVERY OWNER STARTS WITH THE SAME CAR AND BUDGET.',

@@ -258,6 +258,7 @@ const Game = (() => {
     resetStandings();
     refreshOffers();
     if (typeof Biz !== 'undefined') Biz.ensure(S);
+    S.fans = o.mode === 'owner' ? 50 : 400; if (typeof HQ !== 'undefined' && HQ) HQ.ensure(S);
     if (typeof RD !== 'undefined') RD.ensure(S);
     save();
     return S;
@@ -338,7 +339,7 @@ const Game = (() => {
     const pool = s.kart || (s.entry && rep < 20) ? DATA.LOCAL_SPONSORS : DATA.SPONSORS;
     let sp; let guard = 0; do { sp = U.pick(pool); } while (used.includes(sp[0]) && guard++ < 50);
     const base = slot === 'primary' ? s.sponsorPrimary : s.sponsorAssoc;
-    const perRace = Math.max(500, Math.round(base * (0.2 + Math.min(rep, 100) / 100 * 1.3) * U.rand(0.85, 1.2) / 100) * 100);
+    const perRace = Math.max(500, Math.round(base * (0.2 + Math.min(rep, 100) / 100 * 1.3) * U.rand(0.85, 1.2) * (typeof HQ !== 'undefined' && HQ ? HQ.spMul() : 1) / 100) * 100);
     const goals = [['finish', 0.15], ['top10', 0.45], ['top5', 0.9], ['win', 2.2], ['stage', 0.25], ['top15', 0.25]];
     const g = U.pick(goals);
     return { id: U.uid('s'), name: sp[0], colors: [sp[1], sp[2]], slot, perRace, races: U.randi(4, 10), goal: { type: g[0], bonus: Math.round(perRace * g[1] / 100) * 100 },
@@ -586,10 +587,12 @@ const Game = (() => {
     d.first = cap(first); d.last = cap(last); save(); return null;
   }
   // ---------- v1.3: merch, team events, tech inspection ----------
+  function fansShort(n) { n = Math.max(0, Math.round(n || 0)); return n >= 1e6 ? (n / 1e6).toFixed(n < 1e7 ? 2 : 1) + 'M' : n >= 1e4 ? (n / 1e3).toFixed(n < 1e5 ? 1 : 0) + 'K' : n.toLocaleString('en-US'); }
   function merchIncome(best) {
     const sr = ser(); const shop = S.team.fac.fanShop || 1;
     const res = !best ? 1 : best.pos === 1 ? 1.6 : best.pos <= 5 ? 1.25 : best.pos <= 10 ? 1.1 : 1;
-    return Math.round(sr.mult * (150 + S.rep * 22) * (1 + (shop - 1) * 0.35) * res * U.rand(0.85, 1.15) / 50) * 50;
+    // v1.10: fans drive merch (MERCH STORE = the FAN SHOP facility); rep still counts a little
+    return Math.round(sr.mult * (150 + S.rep * 9 + 3.2 * Math.sqrt(S.fans || 0)) * (1 + (shop - 1) * 0.35) * res * U.rand(0.85, 1.15) / 50) * 50;
   }
   function rollEvent(force) {
     if (!force && !U.chance(0.3)) return null;
@@ -704,7 +707,8 @@ const Game = (() => {
     if (spTotal) sum.lines.push(['SPONSOR PAYMENTS', spTotal]);
     if (bonusTotal) sum.lines.push(['SPONSOR BONUSES', bonusTotal]);
     if (!S.free) {
-      const merch = best ? merchIncome(best) : 0; if (merch > 0) sum.lines.push(['MERCH SALES', merch]);
+      const merch = best ? merchIncome(best) : 0; if (merch > 0) sum.lines.push(['MERCH SALES (' + fansShort(S.fans || 0) + ' FANS)', merch]);
+      if (typeof HQ !== 'undefined' && HQ) HQ.raceLines(sum, cars, best); // v1.10 TEAM HQ: fans + fan zone / suites upkeep
       for (const f of sum.insp) { if (f.fine) sum.lines.push(['INSPECTION FINE #' + f.num, -f.fine]); if (f.pts && S.standings[f.id]) { S.standings[f.id].pts = Math.max(0, S.standings[f.id].pts - f.pts); } news(f.text); }
       sum.teamEvent = rollEvent(opts.forceEvent); if (sum.teamEvent && sum.teamEvent.amt) sum.lines.push(['EVENT: ' + sum.teamEvent.title, sum.teamEvent.amt]);
     }
@@ -1065,6 +1069,7 @@ const Game = (() => {
     kauligIn(o); // v1.8: an old Cup save gets Kaulig Racing (Dodge) in its field
     if (typeof Biz !== 'undefined') Biz.migrate(o); // v1.6: charters, rivals, crew chief, manufacturer
     if (typeof RD !== 'undefined') RD.migrate(o); // v1.6 race day: pit crew, feuds, personalities
+    if (typeof HQ !== 'undefined' && HQ) HQ.migrate(o); // v1.10: fans from rep/results, new HQ buildings at level 0
     return o;
   }
   // v1.2: made-up tracks became real ones. Map old ids everywhere they appear (schedule, results, trophies, news).
@@ -1169,7 +1174,7 @@ const Game = (() => {
     entryInfo, standingsOrder, myStandingPos, teamBestPos, ownerStandings, buildEntries, processRace, purse, seasonSummary, finishSeason, takeJob, passDays, syncField,
     // v1.3
     aiWant, removeFromTeam,
-    pathOf, ladderOf, nextTier, prevTier, isKart, isTop, extOffer, extChance, extendContract, canNegotiate, EXT_LEVELS, renameDriver, nameOk, merchIncome, rollEvent, inspRisk, inspWord, inspect,
+    pathOf, ladderOf, nextTier, prevTier, isKart, isTop, extOffer, extChance, extendContract, canNegotiate, EXT_LEVELS, renameDriver, nameOk, merchIncome, fansShort, rollEvent, inspRisk, inspWord, inspect,
     playoffStatus, playoffRoundName, freeTeams, startFree, endFree, isFree, fixFac,
     // v1.4
     nRaces, fmt, promoRule, buyInFor, seasonLen, setSeasonLen, startDemo, endDemo, isDemo,

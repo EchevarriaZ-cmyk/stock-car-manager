@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.10 — TEAM HQ (Nov 27, 2026)
+- **Team HQ:** the FACILITIES tile on the hub is now TEAM HQ, a top-down pixel-art campus for your race shop (you are the owner, never the driver). Ten plots: team office, shop, engine dept, wind tunnel, chassis rig, simulator, pit crew center, merch store, fan zone and hospitality suites. Buildings grow with level (bigger footprint, lit windows from LV 3, haulers from LV 4, flags from LV 5) and show a crane while under construction. Tap a building for its level, effect, next level and an upgrade button.
+- **No duplicate systems:** the seven facilities ARE the HQ buildings. Upgrading in HQ calls the same construction as the Facilities list (still there under LIST VIEW), with the same cost, build time and upkeep. The FAN SHOP facility is now called the MERCH STORE.
+- **Fans:** a new save stat. A good race adds fans (win = about 1,500 × series size^0.8, plus 1% of your fan base; top 3 / 5 / 10 / top half = 60 / 45 / 25 / 10% of that; playoff runs +20%; a 2nd car in the top 10 +10%). Out of the race or bottom third loses 0.8% of fans. Shown on the hub career tile, in the HQ header and after every race.
+- **Merch:** MERCH SALES now scale with fans: series × (150 + 9 × rep + 3.2 × √fans) × merch store level bonus × result. The race money line reads `MERCH SALES (12.4K FANS)`.
+- **New buildings (level 0-5, one race week to build):** FAN ZONE (+25% fan growth per level, extra fans after a good race, 10% smaller fan losses per level) and HOSPITALITY SUITES (+8% per level on new sponsor offers). Their upkeep shows as an `HQ UPKEEP` line in race money.
+- **Old saves:** fans start at 200 + 12 × rep² + 250 × career wins; fan zone and suites start at level 0 (empty lots). Free Mode, the tutorial demo and Owner League never touch HQ or fans.
+- New `js/hq.js`. Service worker cache bumped to scm-1.10.
+
 ## v1.9 — OWNER LEAGUE (Nov 27, 2026)
 - **Owner League:** async online seasons for 2–8 team owners, from the new OWNER LEAGUE button on the hub. Create a league (name, 6 / 10 / 16 real Cup tracks, max owners) and share its 6-character code, or join with a code. You are the team owner / manager, never the driver.
 - **League teams:** team name (bad-word blocker), car number, Chevy / Ford / Toyota / Dodge, and one driver from a 10-driver pool generated from the league code (all 76 overall, each with a different strength). Same car, crew and $1.5M budget for everyone.
