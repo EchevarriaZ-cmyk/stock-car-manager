@@ -370,6 +370,7 @@ const Biz = (() => {
     const d = deal();
     if (d && d.paid < d.races) { d.paid++; sum.lines.push([MAKES[d.make].short + ' SUPPORT', d.perRace]); }
     if (d && d.winBonus > 0 && (d.wins || 0) < DODGE.winMax && cars.some(c => c.r && c.r.pos === 1)) { d.wins = (d.wins || 0) + 1; sum.lines.push([MAKES[d.make].short + ' WIN BONUS', d.winBonus]); }
+    if (d && d.make === 'dodge' && cars.some(c => c.r && c.r.pos === 1)) Game.award('dodgeWin', { note: 'DODGE DEAL' }, true); // v1.8.1 DODGE UNDERDOG trophy
     const c = chief(); if (c && c.raiseF > 0) sum.lines.push(['CREW CHIEF RAISE', -r100(basePay(s.seriesIdx) * c.raiseF)]);
   }
   function afterRace(sum) {

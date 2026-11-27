@@ -38,10 +38,15 @@ const Game = (() => {
     if (once && trophyCount(key)) return null;
     const e = Object.assign({ k: key, s: S.season, y: S.year, w: S.week, series: S.seriesIdx }, info || {});
     S.trophies.log.push(e); if (S.trophies.log.length > 1500) S.trophies.log.splice(0, S.trophies.log.length - 1500);
-    if (trophyCount(key) === 1) { S.trophies.unseen = (S.trophies.unseen || 0) + 1; fresh.push(e); news('TROPHY UNLOCKED: ' + trophyName(key) + '!'); }
+    if (trophyCount(key) === 1) { S.trophies.unseen = (S.trophies.unseen || 0) + 1; fresh.push(e); news('TROPHY UNLOCKED: ' + trophyName(key) + '!'); gjTrophy(key); }
     return e;
   }
   function teamWins() { return S.trophies ? S.trophies.log.filter(e => e.k.startsWith('win:')).length : 0; }
+  // v1.8.1 Game Jolt: only for a real career (never Free Mode or the tutorial demo); GJ fails silently and does nothing for guests
+  const gjLive = () => typeof GJ !== 'undefined' && GJ.on && S && S.team && !S.free && !S.demo;
+  function gjTrophy(key) { try { if (gjLive()) GJ.trophy(key); } catch (e) {} }
+  function gjScore() { try { if (gjLive()) GJ.submitWins(S, teamWins()); } catch (e) {} }
+  function gjStartup() { try { if (gjLive()) GJ.startup(S, trophyCount, teamWins()); } catch (e) {} }
 
   // ---------- drivers ----------
   function driverTypeRating(d, type) {
@@ -792,7 +797,7 @@ const Game = (() => {
     if (two) { sum.standPos2 = myStandingPos('P2'); sum.pts2 = S.standings.P2.pts; }
     if (S.week >= nRaces()) { S.seasonOver = true; sum.seasonOver = true; }
     else { S.week++; S.day = 1; }
-    save();
+    save(); gjScore();
     return sum;
   }
   function playoffStep(res) {
@@ -1100,11 +1105,11 @@ const Game = (() => {
   }
   function save() { if (!S || S.free || S.demo) return; try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) { console.warn('save failed', e); } }
   function load() {
-    try { const j = localStorage.getItem(SAVE_KEY); if (j) { const o = JSON.parse(j); if (!o || !o.team) return false; S = migrate(o); save(); return true; } } catch (e) { console.warn('load failed', e); } return false;
+    try { const j = localStorage.getItem(SAVE_KEY); if (j) { const o = JSON.parse(j); if (!o || !o.team) return false; S = migrate(o); save(); gjStartup(); return true; } } catch (e) { console.warn('load failed', e); } return false;
   }
   function exportCode() { return 'SCM1:' + btoa(unescape(encodeURIComponent(JSON.stringify(S)))); }
   function importCode(code) {
-    try { code = code.trim(); if (code.startsWith('SCM1:')) code = code.slice(5); const obj = JSON.parse(decodeURIComponent(escape(atob(code)))); if (!obj.team || !obj.version) throw new Error('bad'); S = migrate(obj); save(); return null; }
+    try { code = code.trim(); if (code.startsWith('SCM1:')) code = code.slice(5); const obj = JSON.parse(decodeURIComponent(escape(atob(code)))); if (!obj.team || !obj.version) throw new Error('bad'); S = migrate(obj); save(); gjStartup(); return null; }
     catch (e) { return 'That save code is not valid.'; }
   }
   function wipe() { localStorage.removeItem(SAVE_KEY); S = null; STASH = null; }

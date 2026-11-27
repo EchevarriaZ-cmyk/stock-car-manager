@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.8.1 — GAME JOLT TROPHIES (Nov 27, 2026)
+- **Game Jolt trophies:** when the game runs on Game Jolt with a signed-in player (`gjapi_username` / `gjapi_token` in the page URL), newly earned cabinet trophies also unlock on Game Jolt via Game API v1.2 `trophies/add-achieved` (game 1122641), after a `users/auth` check. Mapped: firstStart, firstTop10, firstSponsor, kartChamp, firstPodium, firstPole, playoff, dodgeWin, firstWin, twoCars, million, indy500, indyChamp, cupChamp. A "GAME JOLT TROPHY UNLOCKED" toast shows only when the call succeeds.
+- **New trophy — DODGE UNDERDOG** (`dodgeWin`): win a race with a Dodge manufacturer deal. In the cabinet (Milestones) and on Game Jolt.
+- **Startup sync:** trophies already in the save are sent to Game Jolt once; synced trophy ids are remembered per Game Jolt user in localStorage.
+- **Score table 1137081:** the team's career wins ("12 wins", sort 12), submitted after a race and at load, only when the number goes up.
+- **Silent and safe:** guests, offline play and other hosts make no calls; failures are ignored. Free Mode and the tutorial demo never submit. You are the owner / manager, never the driver.
+- New `js/gamejolt.js` (self-contained md5, no dependencies; private key placeholder `__GJ_PRIVATE_KEY__`). Service worker cache bumped to scm-1.8.1.
+
 ## v1.8 — DODGE IS BACK (Nov 27, 2026)
 - **Dodge returns to the Cup Series from 2027** as a 4th manufacturer next to Chevrolet, Ford and Toyota (Cup only; Trucks and O'Reilly keep the big 3). You are still the owner / manager, never the driver.
 - **Kaulig Racing is Dodge's factory team:** one mid-pack AI Cup team (around the 45th percentile car) runs as Kaulig Racing in black and red, #16 when the number is free. Field strength is unchanged.
