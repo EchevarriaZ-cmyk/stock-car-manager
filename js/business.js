@@ -21,7 +21,13 @@ const Biz = (() => {
     ford: { name: 'FORD', short: 'FORD', bg: '#1f4fa8', fg: '#ffffff' },
     toyota: { name: 'TOYOTA', short: 'TOYOTA', bg: '#d0202a', fg: '#ffffff' },
     honda: { name: 'HONDA', short: 'HONDA', bg: '#e8e8e8', fg: '#c8102e' },
+    // v1.8: Dodge returns to the Cup in 2027 (Kaulig Racing is its factory team) - Cup only, the underdog make
+    dodge: { name: 'DODGE', short: 'DODGE', abbr: 'DOD', bg: '#141414', fg: '#e4202a', since: 2027, cupOnly: true },
   };
+  // v1.8 Dodge underdog: smaller cash and an engine that starts behind and closes the gap each season,
+  // offset by a win bonus (share of the season deal, paid per win, max 3 a season)
+  const DODGE = { year: 2027, perf0: 0.75, perfStep: 0.08, cashF: 0.8, winF: 0.12, winMax: 3 };
+  function dodgePerfF(year) { return Math.min(1, DODGE.perf0 + DODGE.perfStep * Math.max(0, (year || DODGE.year) - DODGE.year)); }
   // deal tiers: cash per season (x series money multiplier), engine boost, goals (share of the races left)
   const TIERS = [
     { name: 'CUSTOMER', cash: 15000, perf: 0.5, goals: [['top15', 0.3]] },
@@ -293,7 +299,11 @@ const Biz = (() => {
   }
 
   // ---------- manufacturers ----------
-  function makesFor(si) { const sr = DATA.SERIES[si === undefined ? S().seriesIdx : si]; if (sr.path === 'nascar') return ['chevy', 'ford', 'toyota']; if (sr.id === 'indycar') return ['honda', 'chevy']; return []; }
+  function makesFor(si) {
+    const s = S(); const sr = DATA.SERIES[si === undefined ? s.seriesIdx : si];
+    if (sr.path === 'nascar') return ['chevy', 'ford', 'toyota'].concat(sr.id === 'cup' && ((s && s.year) || DODGE.year) >= MAKES.dodge.since ? ['dodge'] : []);
+    if (sr.id === 'indycar') return ['honda', 'chevy']; return [];
+  }
   function deal() { const s = S(); const d = s && s.biz && s.biz.mfr.deal; return d && d.season === s.season ? d : null; }
   function engineBonus() { const s = S(); if (!s || s.free || !s.biz) return 0; const d = deal(); return d ? d.perf : 0; }
   function tierFor() { const s = S(); const bonus = s.results.length && Game.teamBestPos() <= 5 ? 10 : 0; const sc = s.rep + bonus; return sc >= 60 ? 2 : sc >= 28 ? 1 : 0; }
@@ -301,6 +311,10 @@ const Biz = (() => {
     const s = S(); const T = TIERS[tier]; const left = Math.max(1, racesLeft() || Game.nRaces());
     const cash = r1k(T.cash * ser().mult * (f || 1) * U.rand(0.94, 1.08));
     const goals = T.goals.map(([type, k]) => ({ type, n: type === 'win' ? 1 : Math.max(1, Math.round(k * left)) }));
+    if (make === 'dodge') { // v1.8 underdog terms
+      const c = r1k(cash * DODGE.cashF), perf = Math.round(T.perf * dodgePerfF(s.year) * 20) / 20;
+      return { id: U.uid('mo'), make, tier, cash: c, perf, goals, exp: wk() + 3, renewal: !!renewal, f: f || 1, winBonus: r1k(c * DODGE.winF) };
+    }
     return { id: U.uid('mo'), make, tier, cash, perf: T.perf, goals, exp: wk() + 3, renewal: !!renewal, f: f || 1 };
   }
   function rollMfr(force, sum) {
@@ -323,6 +337,7 @@ const Biz = (() => {
     const old = deal(); s.money -= cost;
     const left = Math.max(1, racesLeft());
     m.deal = { make: o.make, tier: o.tier, cash: o.cash, perf: o.perf, goals: o.goals.map(g => Object.assign({}, g)), from: s.week, season: s.season, races: left, perRace: r100(o.cash / left), paid: 0 };
+    if (o.winBonus) { m.deal.winBonus = o.winBonus; m.deal.wins = 0; }
     m.offers = [];
     const msg = s.team.name + (old && old.make !== o.make ? ' SWITCHES FROM ' + MAKES[old.make].name + ' TO ' : ' SIGNS WITH ') + MAKES[o.make].name + ' (' + TIERS[o.tier].name + ')' + (cost ? '. SWITCH COST ' + U.money(cost) : '') + '.';
     Game.news(msg); logBiz(msg); Game.save(); return null;
@@ -354,6 +369,7 @@ const Biz = (() => {
     }
     const d = deal();
     if (d && d.paid < d.races) { d.paid++; sum.lines.push([MAKES[d.make].short + ' SUPPORT', d.perRace]); }
+    if (d && d.winBonus > 0 && (d.wins || 0) < DODGE.winMax && cars.some(c => c.r && c.r.pos === 1)) { d.wins = (d.wins || 0) + 1; sum.lines.push([MAKES[d.make].short + ' WIN BONUS', d.winBonus]); }
     const c = chief(); if (c && c.raiseF > 0) sum.lines.push(['CREW CHIEF RAISE', -r100(basePay(s.seriesIdx) * c.raiseF)]);
   }
   function afterRace(sum) {
@@ -406,6 +422,7 @@ const Biz = (() => {
     }
     m.renew = null;
     rollMfr(!m.offers.length && U.chance(0.5));
+    if (s.seriesIdx === CUP && makesFor().includes('dodge') && !b.dodgeNews) { b.dodgeNews = true; Game.news('DODGE IS BACK IN THE CUP SERIES WITH KAULIG RACING AS ITS FACTORY TEAM. THE UNDERDOG PAYS LESS BUT ADDS A WIN BONUS - SEE BUSINESS.'); }
     refreshMarket(true);
     if (s.seriesIdx === CUP && s.mode === 'owner' && chartersInUse() < Game.teamCars().length)
       Game.news('CUP CHARTERS: ' + (chartersInUse() ? 'ONE OF YOUR CARS IS' : 'YOU ARE') + ' AN OPEN ENTRY - RACE IN ON SPEED (4 OPEN SPOTS), OR LEASE / BUY A CHARTER IN BUSINESS.');
@@ -416,7 +433,7 @@ const Biz = (() => {
     const M = MAKES[d.make]; return `<span class="mk-badge" style="background:${M.bg}" title="${M.name}">${PF.img(M.short, { scale: sc || 2, color: M.fg })}</span>`;
   }
   return {
-    CHARTERS, RIVALS, MAKES, TIERS, CHARTER_SHARE, ensure, migrate, live, inCup, racesLeft,
+    CHARTERS, RIVALS, MAKES, TIERS, CHARTER_SHARE, DODGE, dodgePerfF, ensure, migrate, live, inCup, racesLeft,
     held, chartersInUse, carCharter, myValue, sellPrice, leaseInFee, leaseOutFee, leaseCost, canBuyHere, refreshMarket, buyCharter, sellCharter, leaseIn, leaseOut, charterUse, fieldCut, teamDNQ, sitOut,
     chief, chiefPay, chiefCrew, poachOpen, targetName, curPay, counterAmt, counter, letGo, forcePoach, rollPoach, stayChance, prospectBid, outbidAmt, loseProspect, rival,
     makesFor, deal, engineBonus, rollMfr, makeOffer, acceptMfr, declineMfr, switchCost, goalProgress, goalText, tierFor,
@@ -476,12 +493,12 @@ const BizUI = (() => {
     const s = S(); const m = s.biz.mfr; const makes = Biz.makesFor(); const sr = Game.ser();
     if (!makes.length) return `<div class="panel small" style="line-height:1.6">${sr.kart ? 'NO FACTORY DEALS IN KARTING.' : 'THE JUNIOR OPEN-WHEEL SERIES RUN SPEC ENGINES, SO NO MANUFACTURER DEALS HERE. IN INDYCAR, HONDA AND CHEVROLET SUPPLY ENGINES.'}</div>`;
     const d = Biz.deal();
-    const cur = d ? `<div class="panel green"><div class="row" style="align-items:center;gap:8px">${badge(d.make, 3)}<span class="grow small">${Biz.TIERS[d.tier].name} DEAL<br><span class="tiny">${money(d.perRace)}/RACE · ENGINE +${d.perf.toFixed(1)}</span></span></div>
+    const cur = d ? `<div class="panel green"><div class="row" style="align-items:center;gap:8px">${badge(d.make, 3)}<span class="grow small">${Biz.TIERS[d.tier].name} DEAL<br><span class="tiny">${money(d.perRace)}/RACE · ENGINE +${d.perf.toFixed(1)}${d.winBonus ? ' · WIN BONUS ' + money(d.winBonus) + ' (' + (d.wins || 0) + '/' + Biz.DODGE.winMax + ')' : ''}</span></span></div>
         ${Biz.goalProgress(d).map(g => `<div class="tiny biz-goal"><span>${g.type === 'win' ? 'WIN A RACE' : g.text}</span><b class="${g.got >= g.n ? 'up' : ''}">${g.got}/${g.n}</b></div>`).join('')}<div class="tiny" style="margin-top:4px;line-height:1.4">GOALS ARE CHECKED AT SEASON END: HIT THEM FOR A BIGGER DEAL, MISS THEM AND IT SHRINKS OR ENDS.</div></div>`
       : `<div class="panel"><h3>INDEPENDENT</h3><div class="small" style="line-height:1.5">NO MANUFACTURER DEAL. ${makes.map(k => Biz.MAKES[k].name).join(', ')} WATCH YOUR REP AND RESULTS.</div></div>`;
     const rv = m.review ? `<div class="panel ${m.review.outcome === 'better' ? 'green' : m.review.outcome === 'smaller' ? 'orange' : 'red'} tiny" style="line-height:1.5">${m.review.year} REVIEW · ${Biz.MAKES[m.review.make].name}: ${m.review.goals.map(g => (g.type === 'win' ? 'WIN' : g.text) + ' ' + g.got + '/' + g.n).join(' · ')} → ${m.review.outcome === 'better' ? 'BIGGER DEAL' : m.review.outcome === 'smaller' ? 'SMALLER DEAL' : 'DEAL ENDED'}</div>` : '';
     const offers = m.offers.map(o => { const cost = Biz.switchCost(o); return `<div class="panel biz-mo"><div class="row" style="align-items:center;gap:8px">${badge(o.make, 3)}<span class="grow small">${Biz.TIERS[o.tier].name}${o.renewal ? ' · RENEWAL' : ''}</span></div>
-        <div class="tiny" style="line-height:1.5;margin:4px 0">${money(o.cash)} A SEASON · ENGINE +${o.perf.toFixed(1)}<br>GOALS: ${o.goals.map(Biz.goalText).join(' + ')}${cost ? '<br><span class="neon">SWITCH COST ' + money(cost) + '</span>' : ''}</div>
+        <div class="tiny" style="line-height:1.5;margin:4px 0">${money(o.cash)} A SEASON · ENGINE +${o.perf.toFixed(1)}<br>GOALS: ${o.goals.map(Biz.goalText).join(' + ')}${o.winBonus ? '<br><span style="color:#7dff7d">UNDERDOG: ' + money(o.winBonus) + ' PER WIN (MAX ' + Biz.DODGE.winMax + '). ENGINE AT ' + Math.round(Biz.dodgePerfF(s.year) * 100) + '% OF THE BIG 3, CLOSING EVERY SEASON.</span>' : ''}${cost ? '<br><span class="neon">SWITCH COST ' + money(cost) + '</span>' : ''}</div>
         <div class="row" style="gap:6px"><button class="btn green" style="flex:1" data-act="bizMfrYes" data-arg="${o.id}">SIGN</button><button class="btn dark" style="flex:1" data-act="bizMfrNo" data-arg="${o.id}">NO THANKS</button></div></div>`; }).join('');
     return `<div class="cols"><div class="col narrow">${cur}${rv}</div><div class="col"><div class="small ol">OFFERS · ONE MAKE AT A TIME</div>${offers || '<div class="panel small" style="line-height:1.5">NO OFFERS RIGHT NOW. MORE REP AND BETTER RESULTS BRING BIGGER ONES.</div>'}</div></div>`;
   }

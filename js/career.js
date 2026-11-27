@@ -123,6 +123,17 @@ const Game = (() => {
     }
     return teams;
   }
+  // v1.8: Kaulig Racing is Dodge's factory team in the Cup (2027 on). One AI Cup team takes the name: a mid-pack car
+  // (around the 45th percentile of the field), so the field's strength is unchanged. Safe to call again.
+  const KAULIG = 'Kaulig Racing';
+  function kauligIn(o) {
+    if (!o || !Array.isArray(o.ai) || !o.ai.length || o.seriesIdx !== 3 || ((o.year || 2027) < 2027)) return;
+    if (o.ai.some(t => t.kaulig)) return;
+    const byCar = o.ai.slice().sort((a, b) => a.car - b.car); const t = byCar[Math.floor(byCar.length * 0.45)];
+    t.name = KAULIG; t.make = 'dodge'; t.kaulig = true; t.livery = { body: '#141414', stripe: '#e4202a', num: '#f2f2f2' };
+    const nums = new Set(o.ai.map(a => a.number)); if (o.team) { nums.add(o.team.number); if (o.team.car2) nums.add(o.team.car2.number); }
+    if (!nums.has(16)) t.number = 16;
+  }
   // keep the field at the series size: team cars + AI cars = series cars
   // v1.6: the Cup carries a couple of extra open teams that can fail to qualify (field cap = series cars)
   function aiWant() { return ser().cars + (S.free ? 0 : (ser().openExtra || 0)) - teamCars().length; }
@@ -135,6 +146,7 @@ const Game = (() => {
       S.ai = S.ai.filter(t => t !== worst); delete S.standings[worst.id]; if (S.drivers[worst.driverId] && S.drivers[worst.driverId].team === worst.id) delete S.drivers[worst.driverId];
     }
     if (S.ai.length < want) S.ai = S.ai.concat(genAITeams(S.seriesIdx, want - S.ai.length));
+    kauligIn(S);
     const ids = entryIds();
     for (const id of ids) if (!S.standings[id]) S.standings[id] = blankStanding();
     for (const id of Object.keys(S.standings)) if (!ids.includes(id)) delete S.standings[id];
@@ -1012,7 +1024,7 @@ const Game = (() => {
       const keep = new Set(teamDriverIds().concat(expired));
       for (const id of Object.keys(S.drivers)) if (!keep.has(id)) delete S.drivers[id];
       S.freeAgents = S.freeAgents.filter(id => S.drivers[id]); S.scout.list = [];
-      S.ai = []; S.ai = genAITeams(tier, aiWant()); genFreeAgents(11); genRookies(3);
+      S.ai = []; S.ai = genAITeams(tier, aiWant()); kauligIn(S); genFreeAgents(11); genRookies(3);
       if (!freshTeam) { const had = allSponsors(); if (had.length) news('SPONSOR DEALS END WITH THE MOVE UP. NEW, BIGGER OFFERS ARE IN.'); S.team.sponsors = { primary: null, assoc: [null, null] }; if (S.team.car2) S.team.car2.primary = null; }
       S.offers = [];
       S.team.rnd = [];
@@ -1045,6 +1057,7 @@ const Game = (() => {
     migrateTracks(o);
     if (!o.trophies) o.trophies = backfillTrophies(o);
     if (from < 2) { o.migratedFrom = from; o.version = SAVE_VERSION; }
+    kauligIn(o); // v1.8: an old Cup save gets Kaulig Racing (Dodge) in its field
     if (typeof Biz !== 'undefined') Biz.migrate(o); // v1.6: charters, rivals, crew chief, manufacturer
     if (typeof RD !== 'undefined') RD.migrate(o); // v1.6 race day: pit crew, feuds, personalities
     return o;
@@ -1103,7 +1116,7 @@ const Game = (() => {
     if (freeFields[si]) return freeFields[si];
     const keep = S;
     S = { seriesIdx: si, team: null, ai: [], drivers: {}, rep: 50, free: true };
-    try { S.ai = genAITeams(si, DATA.SERIES[si].cars); } finally { const F = S; S = keep; freeFields[si] = F; }
+    try { S.ai = genAITeams(si, DATA.SERIES[si].cars); kauligIn(S); } finally { const F = S; S = keep; freeFields[si] = F; }
     return freeFields[si];
   }
   function freeTeams(si) {

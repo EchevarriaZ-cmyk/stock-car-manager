@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.8 — DODGE IS BACK (Nov 27, 2026)
+- **Dodge returns to the Cup Series from 2027** as a 4th manufacturer next to Chevrolet, Ford and Toyota (Cup only; Trucks and O'Reilly keep the big 3). You are still the owner / manager, never the driver.
+- **Kaulig Racing is Dodge's factory team:** one mid-pack AI Cup team (around the 45th percentile car) runs as Kaulig Racing in black and red, #16 when the number is free. Field strength is unchanged.
+- **Dodge is the underdog:** deals pay 20% less cash and the engine boost starts at 75% of the big 3 in 2027 (Customer +0.4 / Supported +1.15 / Factory +2.25 vs +0.5 / +1.5 / +3), then closes 8 points a season (about even by 2030).
+- **Underdog perk — win bonus:** a Dodge deal pays 12% of the season deal for every race the team wins, up to 3 a season. Shown on the offer card, the current-deal panel and as a race money line (DODGE WIN BONUS).
+- **Black-and-red DODGE badge** (abbreviation DOD) in Business > Manufacturer and on the hub, like the other makes.
+- **Saves:** old saves load as before; a Cup save picks up Kaulig Racing in its field and can get Dodge offers. Service worker cache bumped to scm-1.8.
+
 ## v1.7.1 — WHEEL TO WHEEL (Nov 25, 2026)
 - **Single-file racing with real battles** on every non-drafting track: cars run in the racing line, close up on the car ahead, pull out to pass (side by side only for a few seconds), then complete the pass or lift and tuck back in; the car being passed sometimes defends. Positions change on track instead of the field cruising two-wide.
 - **Road, street and kart tracks:** passes are started mainly into the braking zones, then the field goes back to single file.

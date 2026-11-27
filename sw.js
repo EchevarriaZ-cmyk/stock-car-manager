@@ -1,5 +1,5 @@
 // Stock Car Manager offline support. Network first, so updates arrive; cache when offline.
-const CACHE = 'scm-1.7.1';
+const CACHE = 'scm-1.8';
 const FILES = [
 "./",
 "index.html",
