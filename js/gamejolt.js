@@ -5,7 +5,7 @@
 'use strict';
 const GJ = (() => {
   const GAME_ID = '1122641';
-  const PRIVATE_KEY = '__GJ_PRIVATE_KEY__'; // fill in the game's private key (Game Jolt > Game API > API Settings)
+  const PRIVATE_KEY = 'a42d8eb5193281383d9e616832b09f26'; // fill in the game's private key (Game Jolt > Game API > API Settings)
   const TABLE_ID = '1137081';
   const API = 'https://api.gamejolt.com/api/game/v1_2/';
   // career.js award keys -> Game Jolt trophy ids
