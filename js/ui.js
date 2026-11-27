@@ -163,6 +163,7 @@ const UI = (() => {
         <button class="ticker" data-act="go" data-arg="${has ? 'news' : 'career'}" aria-label="News ticker">${tickerHTML()}</button>
         <button class="biz-btn" data-act="${has ? 'go' : 'needCareer'}" data-arg="business" aria-label="Business"${has ? KB('b', 'B') : ''}>${has && typeof Biz !== 'undefined' ? Biz.badgeHTML(2) : ''}${T('BUSINESS', 2, SH)}${has && typeof Biz !== 'undefined' && Biz.alerts() ? '<span class="newdot">' + Biz.alerts() + '</span>' : ''}</button>
         <button class="free-btn" data-act="go" data-arg="free" aria-label="Free Mode"${KB('q', 'Q')}>${T('FREE\nMODE', 2, SH)}</button>
+        <button class="free-btn lg-btn" data-act="go" data-arg="league" aria-label="Owner League"${KB('o', 'O')}>${T('OWNER\nLEAGUE', 2, SH)}</button>
         <button class="set-btn" data-act="go" data-arg="settings" aria-label="Settings"${KB('s', 'S')}>${PW.icon('gear', 2)}</button>
         <button class="ver-btn" data-act="go" data-arg="updates" aria-label="Update log">${T('V' + DATA.VERSION, 2, SH)}${seenVersion() !== DATA.VERSION ? '<span class="newdot">NEW</span>' : ''}</button></div></div>`);
   }
@@ -1113,7 +1114,7 @@ const UI = (() => {
     closeModal(); if (ui.race && name !== 'race') { ui.race.stopped = true; ui.race = null; }
     // leaving a Free Mode race puts the career back exactly as it was
     if (Game.isFree() && !['prep', 'results'].includes(name)) { Game.endFree(); ui.prep = null; ui.artCache = {}; }
-    if (!S() && !['hub', 'career', 'profile', 'updates', 'free', 'settings'].includes(name)) name = 'hub';
+    if (!S() && !['hub', 'career', 'profile', 'updates', 'free', 'settings', 'league', 'lgView', 'lgChamp'].includes(name)) name = 'hub';
     (SCREENS[name] || hub)(); const pb = $('.page-body'); if (pb) pb.scrollTop = 0;
   }
   function refresh() { const f = SCREENS[ui.screen]; if (f && ui.screen !== 'race') f(); }

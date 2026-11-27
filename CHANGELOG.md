@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.9 — OWNER LEAGUE (Nov 27, 2026)
+- **Owner League:** async online seasons for 2–8 team owners, from the new OWNER LEAGUE button on the hub. Create a league (name, 6 / 10 / 16 real Cup tracks, max owners) and share its 6-character code, or join with a code. You are the team owner / manager, never the driver.
+- **League teams:** team name (bad-word blocker), car number, Chevy / Ford / Toyota / Dodge, and one driver from a 10-driver pool generated from the league code (all 76 overall, each with a different strength). Same car, crew and $1.5M budget for everyone.
+- **Race week picks:** setup (qualify trim / balanced / race trim), strategy (push / normal / save), pit plan on cautions (2 tires / 4 tires / fuel only), plus engine / aero / pit crew upgrades (5 levels each) bought with prize money; upgrades carry over.
+- **Resolving:** when every owner with a team has submitted, or the commissioner taps RUN RACE (missing owners use their last picks), the existing race sim runs headless at a fixed step with Math.random swapped for a PRNG seeded by league code + race index; AI fills the field to 38. The result is stored once and is the same for everyone. WATCH REPLAY rebuilds the race from the stored inputs and plays it in the classic renderer.
+- **Standings, schedule, champion:** Cup-style points (40 for a win down to 1, plus stage points), results with headlines, the schedule with winners, and a podium / confetti champion screen.
+- **Platform:** Game Jolt Game API v1.2 global Data Storage (`data-store/set`, `fetch`, `get-keys`, `update`) via new helpers in `js/gamejolt.js` (`GJ.store`); values over ~1KB go in a POST body. Keys `lg_<CODE>_meta`, `_own` (atomic append), `_team_<user>`, `_pick_<i>_<user>`, `_res_<i>`. Joining appends then re-fetches to verify. Offline / API errors show a toast. Guests see "Play on Game Jolt while signed in to join leagues". Career saves are never touched.
+- New `js/league.js`; `racesim.js` gets an optional per-car caution pit plan. Service worker cache bumped to scm-1.9.
+
 ## v1.8.1 — GAME JOLT TROPHIES (Nov 27, 2026)
 - **Game Jolt trophies:** when the game runs on Game Jolt with a signed-in player (`gjapi_username` / `gjapi_token` in the page URL), newly earned cabinet trophies also unlock on Game Jolt via Game API v1.2 `trophies/add-achieved` (game 1122641), after a `users/auth` check. Mapped: firstStart, firstTop10, firstSponsor, kartChamp, firstPodium, firstPole, playoff, dodgeWin, firstWin, twoCars, million, indy500, indyChamp, cupChamp. A "GAME JOLT TROPHY UNLOCKED" toast shows only when the call succeeds.
 - **New trophy — DODGE UNDERDOG** (`dodgeWin`): win a race with a Dodge manufacturer deal. In the cabinet (Milestones) and on Game Jolt.

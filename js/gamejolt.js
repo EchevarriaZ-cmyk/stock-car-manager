@@ -46,11 +46,11 @@ const GJ = (() => {
   }
 
   // ---------- request URLs: signature = md5(full URL without signature + private key) ----------
-  function buildUrl(endpoint, params, key) {
+  function buildUrl(endpoint, params, key, extra) {
     const q = Object.entries(Object.assign({ game_id: GAME_ID }, params, { format: 'json' }))
       .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&');
     const base = API + endpoint.replace(/^\/+|\/+$/g, '') + '/?' + q;
-    return base + '&signature=' + md5(base + (key === undefined ? PRIVATE_KEY : key));
+    return base + '&signature=' + md5(base + (extra || '') + (key === undefined ? PRIVATE_KEY : key)); // POST: Game Jolt signs url + 'data' + value + key
   }
 
   // ---------- session (URL params only; no params = guest = nothing happens) ----------
@@ -116,6 +116,27 @@ const GJ = (() => {
     return syncTrophies(S, count).then(() => submitWins(S, wins)).catch(() => {});
   }
 
-  return { GAME_ID, TABLE_ID, API, TROPHIES, md5, buildUrl, get on() { return on; }, get user() { return user; }, auth, trophy, syncTrophies, submitWins, startup };
+  // ---------- v1.9 Owner League: global Data Storage helpers ----------
+  // Unlike call(), these reject on network errors (so the league UI can say OFFLINE) and resolve with the raw response.
+  // Large values go in a POST body as field 'data'; the signature still covers the URL only.
+  function ds(endpoint, params, post) {
+    if (!on) return Promise.reject(new Error('signed out'));
+    let url; try { url = buildUrl(endpoint, params, undefined, post === undefined ? '' : 'data' + post); } catch (e) { return Promise.reject(e); }
+    const opt = post === undefined ? { method: 'GET', cache: 'no-store' } : { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(post) };
+    return fetch(url, opt).then(r => { if (!r.ok) throw new Error('http ' + r.status); return r.json(); }).then(j => { if (!j || !j.response) throw new Error('bad response'); return j.response; });
+  }
+  const store = {
+    // value -> true (or throws). Strings over ~1KB go in the POST body.
+    set: (key, val) => { const v = typeof val === 'string' ? val : JSON.stringify(val); return (v.length > 900 ? ds('data-store/set', { key }, v) : ds('data-store/set', { key, data: v })).then(r => { if (!ok(r)) throw new Error(r.message || 'set failed'); return true; }); },
+    // -> string, or null when the key does not exist (throws on network errors)
+    fetch: (key) => ds('data-store/fetch', { key }).then(r => ok(r) ? String(r.data) : null),
+    json: (key) => store.fetch(key).then(v => { if (v === null) return null; try { return JSON.parse(v); } catch (e) { return null; } }),
+    keys: (pattern) => ds('data-store/get-keys', { pattern }).then(r => ok(r) ? (r.keys || []).map(k => k.key) : []),
+    // login check that tells offline (rejects) apart from a bad login (false); only a success is remembered
+    auth: () => store.authed ? Promise.resolve(true) : ds('users/auth', { username: user, user_token: token }).then(r => (store.authed = ok(r))),
+    update: (key, operation, value) => ds('data-store/update', { key, operation, value }).then(r => { if (!ok(r)) throw new Error(r.message || 'update failed'); return String(r.data); }),
+  };
+
+  return { GAME_ID, TABLE_ID, API, TROPHIES, md5, buildUrl, get on() { return on; }, get user() { return user; }, auth, store, trophy, syncTrophies, submitWins, startup };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = GJ;

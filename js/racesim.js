@@ -46,6 +46,7 @@ const RaceSim = (() => {
       // v1.1: a team can run two cars. playerIds lists every team car; the first is "car 1".
       this.playerIds = opts.playerIds || [opts.playerId]; this.playerId = this.playerIds[0];
       this.autoPlayer = !!opts.autoPlayer; this.style = opts.style || 'balanced';
+      this.pitPlan = opts.pitPlan || null; // v1.9 Owner League: per-car caution pit plan ('two' | 'four' | 'fuel') for auto-run team cars
       this.callQueue = []; this.restartT = 0;
       this.onEvent = opts.onEvent || (() => {});
       this.finishOrder = []; this.paused = false; this.finishT = 0; this.restartPending = false;
@@ -152,7 +153,8 @@ const RaceSim = (() => {
       for (const c of o) {
         if (c.pit) continue;
         if (c.isPlayer && !this.autoPlayer) continue;
-        const ch = cautionChoice(this, c, c.isPlayer ? this.style : U.pick(['aggressive', 'balanced', 'balanced', 'conservative']));
+        let ch = cautionChoice(this, c, c.isPlayer ? this.style : U.pick(['aggressive', 'balanced', 'balanced', 'conservative']));
+        if (c.isPlayer && this.pitPlan && this.pitPlan[c.id] && ch !== 'stay' && c.damage <= 0.12) ch = this.pitPlan[c.id]; // v1.9 league pit plan
         if (ch !== 'stay') c.pit = { type: ch, phase: 'wait' };
         else if (c.isPlayer) this.msg(this.tag(c) + 'CREW CHIEF: WE STAY OUT', 'player');
         if (c.isPlayer && ch !== 'stay') this.msg(this.tag(c) + 'CREW CHIEF CALLS ' + ({ four: '4 TIRES', two: '2 TIRES', fuel: 'FUEL ONLY' })[ch], 'player');

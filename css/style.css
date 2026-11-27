@@ -721,3 +721,26 @@ body.pc .shelf { flex-wrap: wrap; overflow-x: visible; row-gap: 8px; }
 .rd-brk { display: flex; justify-content: space-between; gap: 6px; font-size: 10px; padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,.08); } .rd-brk b { color: var(--neon); }
 .rd-resp { gap: 5px; flex-wrap: nowrap; } .rd-resp .btn { flex: 1; min-width: 0; flex-direction: column; font-size: 11px; padding: 2px 3px; line-height: 1.15; } .rd-resp .btn small { font-size: 7px; opacity: .9; display: block; }
 .rd-feud { display: flex; justify-content: space-between; gap: 6px; margin-top: 3px; } .rd-feud b { color: #ff6b6b; }
+/* v1.9 OWNER LEAGUE */
+.pw-bot .lg-btn { background: #3a1e1e; box-shadow: inset 0 0 0 2px #e30d0d; }
+.lg .lg-tabs { margin-bottom: 8px; gap: 6px; flex-wrap: nowrap; overflow-x: auto; }
+.lg .lg-tabs .btn { flex: 0 0 auto; padding: 0 10px; font-size: 12px; }
+.lg .lg-opt { gap: 6px; margin: 4px 0 6px; flex-wrap: nowrap; } .lg .lg-opt .btn { flex: 1; padding: 0 6px; font-size: 12px; }
+.lg .lg-code { background: #e6ff2b; color: #15171b; font-size: 13px; padding: 6px 8px; margin-right: 6px; }
+.lg .lg-busy { position: fixed; top: 50px; left: 50%; transform: translateX(-50%); z-index: 50; background: #e6ff2b; color: #15171b; padding: 6px 14px; border: 3px solid #15171b; border-radius: 6px; font-size: 12px; }
+.lg .lg-busy[hidden] { display: none; }
+.lg .lg-drv { width: 100%; margin-bottom: 4px; text-align: left; } .lg .lg-drv.sel { box-shadow: inset 0 0 0 3px #e6ff2b; } .lg .lg-drv[disabled] { opacity: .45; cursor: default; }
+.lg .lg-up { margin-top: 6px; cursor: default; }
+.lg .lg-car { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.lg .lg-heads { margin: 6px 0 8px; padding-left: 16px; font-size: 11px; line-height: 1.5; }
+.lg .lg-sched { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.lg .lg-wk { min-height: 84px; } .lg .lg-sign { max-width: 640px; margin: 10px auto; text-align: center; } .lg .lg-sign a { display: inline-grid; place-items: center; text-decoration: none; }
+.lg .txt { width: 100%; }
+.lg .q-in { background: #2e9b3a; } .lg .q-out { background: #6b3a3a; }
+.lg-rp .lg-rtop { position: absolute; left: 0; right: 0; top: 0; height: 30px; line-height: 30px; padding: 0 10px; background: rgba(13,14,16,.85); font-size: 12px; z-index: 3; }
+.lg-rp .lg-rtop .yl { color: #ffd000; } .lg-rp .lg-rtop .gr { color: #2ecc40; }
+.lg-rp .lg-tower { position: absolute; left: 0; top: 30px; bottom: 0; width: 150px; overflow-y: auto; background: rgba(13,14,16,.8); font-size: 10px; z-index: 3; padding: 4px; }
+.lg-rp .lg-tower div { display: flex; gap: 4px; align-items: center; height: 20px; white-space: nowrap; overflow: hidden; }
+.lg-rp .lg-tower div.own { background: rgba(47,98,216,.6); } .lg-rp .lg-tower div.mine { background: rgba(230,255,43,.3); }
+.lg-rp .lg-tower b { width: 16px; text-align: right; } .lg-rp .lg-tower .btn { margin-top: 6px; }
+.lg-rp .lg-rbtns { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; z-index: 4; }
